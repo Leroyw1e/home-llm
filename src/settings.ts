@@ -2,6 +2,7 @@ import { App, Platform, PluginSettingTab, Setting } from "obsidian";
 import type HomeLLMPlugin from "./main";
 import { SCENE_LABELS } from "./scenes";
 import type { WordBaseline } from "./stats";
+import { TRANSCRIBER_LABELS, type Transcriber } from "./voice";
 
 export type ProviderId = "anthropic" | "openai" | "openrouter" | "custom";
 export type ChatLocation = "left" | "right" | "tab";
@@ -21,6 +22,13 @@ export interface HomeLLMSettings {
 	/** Feature switches: the home screen (and its ribbon button), and everything AI. */
 	homeEnabled: boolean;
 	aiEnabled: boolean;
+	/** Voice notes: the mic button that records into a new note. */
+	voiceEnabled: boolean;
+	/** Who turns speech into text ("auto" picks whichever key is set). */
+	voiceProvider: "auto" | Transcriber;
+	/** Transcription model; empty uses the provider's default. */
+	voiceModel: string;
+	voiceFolder: string;
 	provider: ProviderId;
 	anthropicKey: string;
 	anthropicModel: string;
@@ -62,6 +70,10 @@ export interface HomeLLMSettings {
 export const DEFAULT_SETTINGS: HomeLLMSettings = {
 	homeEnabled: true,
 	aiEnabled: true,
+	voiceEnabled: true,
+	voiceProvider: "auto",
+	voiceModel: "",
+	voiceFolder: "Voice notes",
 	provider: "anthropic",
 	anthropicKey: "",
 	anthropicModel: "claude-sonnet-5-5",
@@ -185,6 +197,17 @@ export class HomeLLMSettingTab extends PluginSettingTab {
 				})
 			);
 
+		new Setting(containerEl)
+			.setName("Voice notes")
+			.setDesc("A microphone button that records into a new note. With AI on, the recording is turned into a transcript and notes.")
+			.addToggle((t) =>
+				t.setValue(s.voiceEnabled).onChange(async (v) => {
+					s.voiceEnabled = v;
+					await save();
+					this.plugin.applyFeatures();
+				})
+			);
+
 		heading("AI provider");
 		new Setting(containerEl)
 			.setName("Default provider")
@@ -274,6 +297,20 @@ export class HomeLLMSettingTab extends PluginSettingTab {
 				await save();
 			});
 		});
+
+		heading("Voice notes");
+		new Setting(containerEl)
+			.setName("Transcription")
+			.setDesc("Claude can't listen to audio, so another service turns speech into text with the keys above. Automatic uses OpenAI if it has a key, otherwise the other providers. Your default AI model then writes the notes.")
+			.addDropdown((d) => {
+				for (const [v, label] of Object.entries(TRANSCRIBER_LABELS)) d.addOption(v, label);
+				d.setValue(s.voiceProvider).onChange(async (v) => {
+					s.voiceProvider = v as HomeLLMSettings["voiceProvider"];
+					await save();
+				});
+			});
+		textField("Transcription model", "voiceModel", "Leave empty for the default: gpt-4o-transcribe on OpenAI, google/gemini-2.5-flash on OpenRouter, whisper-1 on a custom server.");
+		textField("Voice notes folder", "voiceFolder", "Recordings go wherever Obsidian puts attachments.");
 
 		heading("Chat");
 		new Setting(containerEl)

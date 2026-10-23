@@ -6,6 +6,7 @@ import { ensureMemoryNote, memoryPath } from "./memory";
 import { proofread } from "./proofread";
 import { ChatLocation, DEFAULT_SETTINGS, HomeLLMSettingTab, HomeLLMSettings } from "./settings";
 import { VaultStats } from "./stats";
+import { VoiceRecorder, saveVoiceNote } from "./voice";
 import { WIDGETS } from "./widgets";
 
 /** Code block language for note widgets: ```home-widget\nstats\n``` */
@@ -59,6 +60,9 @@ export default class HomeLLMPlugin extends Plugin {
 	private lastFile: TFile | null = null;
 	private homeRibbon: HTMLElement | null = null;
 	private chatRibbon: HTMLElement | null = null;
+	private voiceRibbon: HTMLElement | null = null;
+	private recording: VoiceRecorder | null = null;
+	private startingRecording = false;
 	private saveChatsSoon = debounce(() => void this.saveChats(), 500, true);
 
 	async onload(): Promise<void> {
@@ -103,6 +107,7 @@ export default class HomeLLMPlugin extends Plugin {
 
 		this.homeRibbon = this.addRibbonIcon("home", "Open home", () => void this.openHome());
 		this.chatRibbon = this.addRibbonIcon("bot", "Open AI chat", () => void this.openChat());
+		this.voiceRibbon = this.addRibbonIcon("mic", "Record voice note", () => void this.toggleRecording());
 		if (!Platform.isMobile) this.addRibbonSpacers();
 
 		this.addCommand({ id: "open-home", name: "Open home screen", checkCallback: this.when("home", () => void this.openHome()) });
@@ -116,6 +121,26 @@ export default class HomeLLMPlugin extends Plugin {
 			checkCallback: (checking) => {
 				if (!this.settings.aiEnabled || !this.app.workspace.getActiveFile()) return false;
 				if (!checking) void this.openChat(undefined, true);
+				return true;
+			},
+		});
+		this.addCommand({
+			id: "record-voice-note",
+			name: "Record voice note (start or stop)",
+			icon: "mic",
+			checkCallback: (checking) => {
+				if (!this.settings.voiceEnabled && !this.recording) return false;
+				if (!checking) void this.toggleRecording();
+				return true;
+			},
+		});
+		this.addCommand({
+			id: "pause-voice-note",
+			name: "Pause or resume recording",
+			icon: "pause",
+			checkCallback: (checking) => {
+				if (!this.recording) return false;
+				if (!checking) this.recording.togglePause();
 				return true;
 			},
 		});
@@ -167,6 +192,7 @@ export default class HomeLLMPlugin extends Plugin {
 	}
 
 	onunload(): void {
+		this.recording?.cancel();
 		void this.saveChats();
 		activeDocument.body.removeClass("hl-graph-default-lines");
 		this.app.workspace.trigger("css-change");
@@ -204,9 +230,46 @@ export default class HomeLLMPlugin extends Plugin {
 		const { homeEnabled, aiEnabled } = this.settings;
 		this.homeRibbon?.toggleClass("hl-hidden", !homeEnabled);
 		this.chatRibbon?.toggleClass("hl-hidden", !aiEnabled);
+		this.voiceRibbon?.toggleClass("hl-hidden", !this.settings.voiceEnabled && !this.recording);
 		if (!homeEnabled) this.app.workspace.detachLeavesOfType(HOME_VIEW_TYPE);
 		if (!aiEnabled) this.app.workspace.detachLeavesOfType(CHAT_VIEW_TYPE);
 		this.refreshHomeViews();
+	}
+
+	/** Starts a recording, or stops the current one and turns it into a note. */
+	async toggleRecording(): Promise<void> {
+		if (this.recording) {
+			await this.stopRecording();
+			return;
+		}
+		if (this.startingRecording) return;
+		this.startingRecording = true;
+		try {
+			this.recording = await VoiceRecorder.start(
+				() => this.recording?.togglePause(),
+				() => void this.stopRecording()
+			);
+		} finally {
+			this.startingRecording = false;
+		}
+		this.voiceRibbon?.toggleClass("hl-recording", !!this.recording);
+	}
+
+	private async stopRecording(): Promise<void> {
+		const rec = this.recording;
+		if (!rec) return;
+		this.recording = null;
+		this.voiceRibbon?.removeClass("hl-recording");
+		const { blob, ms } = await rec.stop();
+		if (!blob.size || ms < 500) {
+			new Notice("Recording too short, nothing saved");
+			return;
+		}
+		try {
+			await saveVoiceNote(this, blob, ms);
+		} catch (e) {
+			new Notice("Couldn't save the voice note: " + (e instanceof Error ? e.message : String(e)));
+		}
 	}
 
 	/** Opens the AI's memory note in a new tab, creating it if needed. */

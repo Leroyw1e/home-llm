@@ -1863,3 +1863,115 @@ body:not(.hl-graph-default-lines) .graph-view.color-line-highlight {
 	background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
 	white-space: nowrap;
 }
+
+/* ---------- Voice notes ---------- */
+
+.side-dock-ribbon-action.hl-recording {
+	color: var(--color-red);
+}
+
+.side-dock-ribbon-action.hl-recording svg {
+	animation: hl-rec-pulse 1.4s ease-in-out infinite;
+}
+
+.hl-rec-bar {
+	position: fixed;
+	top: calc(var(--header-height, 40px) + 8px);
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: var(--layer-notice);
+	width: min(640px, calc(100vw - 24px));
+	height: 48px;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 0 8px 0 16px;
+	border-radius: 24px;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: var(--shadow-l);
+	animation: hl-rec-in 180ms ease-out;
+}
+
+.hl-rec-bar.is-mobile {
+	top: calc(env(safe-area-inset-top, 0px) + 8px);
+}
+
+.hl-rec-dot {
+	flex: none;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--color-red);
+	animation: hl-rec-pulse 1.4s ease-in-out infinite;
+}
+
+.hl-rec-time {
+	flex: none;
+	min-width: 3.2em;
+	font-variant-numeric: tabular-nums;
+	font-size: var(--font-ui-small);
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.hl-rec-wave {
+	flex: 1;
+	min-width: 0;
+	height: 30px;
+	color: var(--interactive-accent);
+}
+
+.hl-rec-btn.clickable-icon {
+	flex: none;
+	width: 34px;
+	height: 34px;
+	padding: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+	color: var(--text-normal);
+}
+
+.hl-rec-btn.clickable-icon:hover {
+	background: var(--background-modifier-hover);
+}
+
+.hl-rec-stop.clickable-icon {
+	color: var(--color-red);
+}
+
+.hl-rec-stop svg {
+	fill: currentColor;
+}
+
+.hl-rec-bar.is-paused .hl-rec-dot {
+	background: var(--text-faint);
+	animation: none;
+}
+
+.hl-rec-bar.is-paused .hl-rec-wave {
+	opacity: 0.5;
+}
+
+@keyframes hl-rec-pulse {
+	50% {
+		opacity: 0.35;
+	}
+}
+
+@keyframes hl-rec-in {
+	from {
+		opacity: 0;
+		transform: translate(-50%, -8px);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.hl-rec-dot,
+	.side-dock-ribbon-action.hl-recording svg,
+	.hl-rec-bar {
+		animation: none;
+	}
+}

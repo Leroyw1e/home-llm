@@ -44,8 +44,14 @@ Optionally draws the lines between linked notes in purple (on by default; reopen
 - Run it from the command palette, the right-click menu in a note, or by typing `/` with Obsidian's core **Slash commands** plugin turned on.
 - Spelling variants: Australian, British, American, Canadian and New Zealand English.
 
+### Voice notes
+- Press the **microphone** in the left ribbon (or run "Record voice note") to start recording. A bar across the top of the window shows a live audio line, the time, and **pause** and **stop** buttons.
+- When you stop, a new note opens with the recording in it. With AI on, the recording is turned into text and your AI model writes a title, summary, key points and action items, followed by the full transcript.
+- Claude can't listen to audio, so the speech-to-text step uses **OpenAI** (gpt-4o-transcribe), an audio model on **OpenRouter**, or your own Whisper-compatible server. Add one of those keys in settings; the notes are then written by whichever model you normally use.
+- The recording is always kept in your attachments folder, so nothing is lost if a step fails. Works on desktop, iPhone and iPad (allow microphone access when asked).
+
 ### On/off switches
-Turn the **home screen** or the **AI features** off in settings (or with the "Turn home screen on or off" and "Turn AI on or off" commands). With AI off, nothing is sent to any AI provider.
+Turn the **home screen**, **voice notes** or the **AI features** off in settings (or with the "Turn home screen on or off" and "Turn AI on or off" commands). With AI off, nothing is sent to any AI provider.
 
 ### Ribbon spacers (desktop)
 Adds a few small gaps to the left ribbon so you can group your icons. Hold the command key (control on Windows) to make them easy to see, then drag them like any ribbon icon.
@@ -68,14 +74,17 @@ Adds a few small gaps to the left ribbon so you can group your icons. Hold the c
 | Spell check: fix everything | Always fixes everything |
 | Insert widget | Adds a widget to the current note |
 | Open AI memory note | Opens the note the AI remembers things in |
+| Record voice note (start or stop) | Starts a recording, or stops it and makes the note |
+| Pause or resume recording | Pauses or resumes the current recording |
 
 ## Privacy and network use
 
-This plugin needs an account with an AI provider to use chat and spell check.
+This plugin needs an account with an AI provider to use chat, spell check and voice note transcription.
 
 - **What is sent:** your chat messages, the note you attach, notes the AI reads or searches while answering (only with vault access on, except the open note), and the text you spell check are sent to the AI provider you choose: `api.anthropic.com`, `api.openai.com`, `openrouter.ai`, or the custom server address you enter. Nothing is sent until you send a message or run spell check.
 - **API keys** are stored in this plugin's `data.json` inside your vault's config folder. If you sync your vault, the keys sync too.
 - **Chat history** is stored in `chats.json` in the same folder, and never leaves your device except through your own vault sync.
+- **Voice notes**: recordings are saved in your vault. With AI on, the audio is sent to the transcription service you chose (`api.openai.com`, `openrouter.ai` or your custom server), and the transcript to your AI provider. The microphone is only on while the recording bar is showing.
 - **Memory**: with memory on, the contents of your memory note are sent to your AI provider at the start of each chat.
 - There is **no telemetry, analytics or tracking**, and the plugin doesn't load anything from the internet other than the AI requests above.
 

@@ -117,7 +117,7 @@ interface OpenAIEndpoint {
 	headers: Record<string, string>;
 }
 
-function openaiEndpoint(s: HomeLLMSettings, provider: ProviderId): OpenAIEndpoint {
+export function openaiEndpoint(s: HomeLLMSettings, provider: ProviderId): OpenAIEndpoint {
 	const headers: Record<string, string> = { "Content-Type": "application/json" };
 	let base: string;
 	let key: string;
