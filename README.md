@@ -1,4 +1,4 @@
-# Home + AI
+# Home + AI (AI optional)
 
 A home screen for your Obsidian vault with live vault stats, widgets you can put in any note, an AI chat that lives in a tab or sidebar, and an AI spell and grammar checker. Works on desktop, iPhone and iPad.
 
@@ -52,8 +52,8 @@ Adds a few small gaps to the left ribbon so you can group your icons. Hold the c
 
 ## Setup
 
-1. Install and enable **Home + AI** from **Settings → Community plugins**.
-2. Open **Settings → Home + AI**, choose a provider and paste your API key (not needed for a local server).
+1. Install and enable **Home + AI (AI optional)** from **Settings → Community plugins**.
+2. Open **Settings → Home + AI (AI optional)**, choose a provider and paste your API key (not needed for a local server).
 3. Pick a home style and background under **Home screen**.
 
 ## Commands
