@@ -1,6 +1,6 @@
-import { App, TFile, normalizePath, requestUrl } from "obsidian";
+import { App, TFile, normalizePath } from "obsidian";
 import { readMemory, saveMemory, withFact, withoutFact } from "./memory";
-import type { ChatMessage } from "./providers";
+import { ChatMessage, anthropicCall, openaiCall } from "./providers";
 import type { HomeLLMSettings, ProviderId } from "./settings";
 
 /** A step the AI took, shown as a small label above its reply. */
@@ -313,15 +313,6 @@ class VaultTools {
 	}
 }
 
-function errorText(status: number, body: string): string {
-	try {
-		const j = JSON.parse(body) as { error?: { message?: string }; message?: string };
-		return `HTTP ${status}: ${j.error?.message ?? j.message ?? body}`;
-	} catch {
-		return `HTTP ${status}: ${body.slice(0, 300)}`;
-	}
-}
-
 function parseArgs(raw: unknown): Record<string, unknown> {
 	if (raw && typeof raw === "object") return raw as Record<string, unknown>;
 	if (typeof raw !== "string" || !raw.trim()) return {};
@@ -332,35 +323,19 @@ function parseArgs(raw: unknown): Record<string, unknown> {
 	}
 }
 
-interface AnthropicBlock {
-	type: string;
-	text?: string;
-	id?: string;
-	name?: string;
-	input?: unknown;
-}
-
 async function anthropicLoop(s: HomeLLMSettings, model: string, history: ChatMessage[], system: string, tools: VaultTools): Promise<string> {
-	if (!s.anthropicKey) throw new Error("No Anthropic API key set. Add it in plugin settings.");
 	const messages: { role: "user" | "assistant"; content: unknown }[] = history.map((m) => ({ role: m.role, content: m.content }));
 	const toolSpec = tools.defs().map((t) => ({ name: t.name, description: t.description, input_schema: t.schema }));
 	for (let round = 0; round < MAX_ROUNDS; round++) {
-		const res = await requestUrl({
-			url: "https://api.anthropic.com/v1/messages",
-			method: "POST",
-			headers: { "Content-Type": "application/json", "x-api-key": s.anthropicKey, "anthropic-version": "2023-06-01" },
-			body: JSON.stringify({ model, max_tokens: s.maxTokens, temperature: s.temperature, system, messages, tools: toolSpec }),
-			throw: false,
-		});
-		if (res.status >= 400) throw new Error(errorText(res.status, res.text));
-		const data = res.json as { content?: AnthropicBlock[]; stop_reason?: string };
-		const blocks = data.content ?? [];
+		const reply = await anthropicCall(s, model, { system, messages, tools: toolSpec });
+		const blocks = reply.content;
 		const calls = blocks.filter((b) => b.type === "tool_use");
 		const text = blocks
 			.filter((b) => b.type === "text")
 			.map((b) => b.text ?? "")
 			.join("");
 		if (!calls.length) return text;
+		// Pass the whole reply back unchanged (thinking blocks included); the history only ever grows.
 		messages.push({ role: "assistant", content: blocks });
 		const results = [];
 		for (const c of calls) results.push({ type: "tool_result", tool_use_id: c.id, content: await tools.run(c.name ?? "", parseArgs(c.input)) });
@@ -369,43 +344,11 @@ async function anthropicLoop(s: HomeLLMSettings, model: string, history: ChatMes
 	return "I stopped after too many steps. Try asking in a more specific way.";
 }
 
-interface OpenAIToolCall {
-	id: string;
-	function: { name: string; arguments: string };
-}
-
 async function openaiLoop(s: HomeLLMSettings, provider: ProviderId, model: string, history: ChatMessage[], system: string, tools: VaultTools | null): Promise<string> {
-	let base: string;
-	let key: string;
-	const headers: Record<string, string> = { "Content-Type": "application/json" };
-	if (provider === "openai") {
-		base = "https://api.openai.com/v1";
-		key = s.openaiKey;
-	} else if (provider === "openrouter") {
-		base = "https://openrouter.ai/api/v1";
-		key = s.openrouterKey;
-		headers["HTTP-Referer"] = "https://obsidian.md";
-		headers["X-Title"] = "Home & LLM";
-	} else {
-		base = s.customBaseUrl.replace(/\/+$/, "");
-		key = s.customKey;
-	}
-	if (provider !== "custom" && !key) throw new Error(`No API key set for ${provider}. Add it in plugin settings.`);
-	if (key) headers["Authorization"] = `Bearer ${key}`;
-
 	const messages: Record<string, unknown>[] = [{ role: "system", content: system }, ...history.map((m) => ({ role: m.role, content: m.content }))];
 	const toolSpec = tools?.defs().map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.schema } }));
 	for (let round = 0; round < MAX_ROUNDS; round++) {
-		const res = await requestUrl({
-			url: `${base}/chat/completions`,
-			method: "POST",
-			headers,
-			body: JSON.stringify({ model, temperature: s.temperature, max_tokens: s.maxTokens, messages, ...(toolSpec ? { tools: toolSpec } : {}) }),
-			throw: false,
-		});
-		if (res.status >= 400) throw new Error(errorText(res.status, res.text));
-		const msg = (res.json as { choices?: { message?: { content?: string | null; tool_calls?: OpenAIToolCall[] } }[] }).choices?.[0]?.message;
-		if (!msg) throw new Error("Unexpected response: " + res.text.slice(0, 300));
+		const msg = await openaiCall(s, provider, model, { messages, tools: toolSpec });
 		const calls = msg.tool_calls ?? [];
 		if (!calls.length || !tools) return msg.content ?? "";
 		messages.push({ role: "assistant", content: msg.content ?? "", tool_calls: calls });

@@ -5,8 +5,22 @@ import type { WordBaseline } from "./stats";
 
 export type ProviderId = "anthropic" | "openai" | "openrouter" | "custom";
 export type ChatLocation = "left" | "right" | "tab";
+/** How hard the model thinks before answering; "default" leaves it to the model. */
+export type Effort = "default" | "low" | "medium" | "high" | "xhigh" | "max";
+
+export const EFFORT_LABELS: Record<Effort, string> = {
+	default: "Model default",
+	low: "Low",
+	medium: "Medium",
+	high: "High",
+	xhigh: "Extra high",
+	max: "Max",
+};
 
 export interface HomeLLMSettings {
+	/** Feature switches: the home screen (and its ribbon button), and everything AI. */
+	homeEnabled: boolean;
+	aiEnabled: boolean;
 	provider: ProviderId;
 	anthropicKey: string;
 	anthropicModel: string;
@@ -20,6 +34,7 @@ export interface HomeLLMSettings {
 	systemPrompt: string;
 	temperature: number;
 	maxTokens: number;
+	effort: Effort;
 	chatLocation: ChatLocation;
 	chatSaveFolder: string;
 	openHomeOnStartup: boolean;
@@ -45,6 +60,8 @@ export interface HomeLLMSettings {
 }
 
 export const DEFAULT_SETTINGS: HomeLLMSettings = {
+	homeEnabled: true,
+	aiEnabled: true,
 	provider: "anthropic",
 	anthropicKey: "",
 	anthropicModel: "claude-sonnet-5-5",
@@ -57,7 +74,8 @@ export const DEFAULT_SETTINGS: HomeLLMSettings = {
 	customModel: "llama3.1",
 	systemPrompt: "You are a helpful assistant inside the user's Obsidian vault. Answer in Markdown.",
 	temperature: 0.7,
-	maxTokens: 2048,
+	maxTokens: 16000,
+	effort: "default",
 	chatLocation: "right",
 	chatSaveFolder: "AI Chats",
 	openHomeOnStartup: true,
@@ -145,7 +163,29 @@ export class HomeLLMSettingTab extends PluginSettingTab {
 					})
 				);
 
-		// AI models
+		heading("Features");
+		new Setting(containerEl)
+			.setName("Home screen")
+			.setDesc("The home page, its ribbon button and commands. Widgets in notes keep working either way.")
+			.addToggle((t) =>
+				t.setValue(s.homeEnabled).onChange(async (v) => {
+					s.homeEnabled = v;
+					await save();
+					this.plugin.applyFeatures();
+				})
+			);
+		new Setting(containerEl)
+			.setName("AI")
+			.setDesc("The AI chat, spell check and memory. When off, nothing is sent to any AI provider.")
+			.addToggle((t) =>
+				t.setValue(s.aiEnabled).onChange(async (v) => {
+					s.aiEnabled = v;
+					await save();
+					this.plugin.applyFeatures();
+				})
+			);
+
+		heading("AI provider");
 		new Setting(containerEl)
 			.setName("Default provider")
 			.setDesc("API keys are stored in this plugin's data file inside your vault. If you sync your vault, the keys sync too.")
@@ -171,6 +211,16 @@ export class HomeLLMSettingTab extends PluginSettingTab {
 		textField("Model", "customModel");
 
 		heading("Replies");
+		new Setting(containerEl)
+			.setName("Effort")
+			.setDesc("How hard the AI thinks before answering. Higher handles harder questions but is slower and costs more. Some providers only go up to high, and models without this setting ignore it.")
+			.addDropdown((d) => {
+				for (const e of Object.keys(EFFORT_LABELS) as Effort[]) d.addOption(e, EFFORT_LABELS[e]);
+				d.setValue(s.effort).onChange(async (v) => {
+					s.effort = v as Effort;
+					await save();
+				});
+			});
 		new Setting(containerEl).setName("System prompt").addTextArea((t) => {
 			t.inputEl.rows = 4;
 			t.setValue(s.systemPrompt).onChange(async (v) => {
@@ -178,7 +228,10 @@ export class HomeLLMSettingTab extends PluginSettingTab {
 				await save();
 			});
 		});
-		new Setting(containerEl).setName("Temperature").addSlider((sl) =>
+		new Setting(containerEl)
+			.setName("Temperature")
+			.setDesc("Randomness of replies. Used by OpenAI-compatible and older Claude models; current Claude models choose their own.")
+			.addSlider((sl) =>
 			sl
 				.setLimits(0, 1, 0.05)
 				.setValue(s.temperature)
@@ -187,7 +240,10 @@ export class HomeLLMSettingTab extends PluginSettingTab {
 					await save();
 				})
 		);
-		new Setting(containerEl).setName("Max tokens").addText((t) =>
+		new Setting(containerEl)
+			.setName("Max tokens")
+			.setDesc("Longest reply allowed, including the AI's thinking.")
+			.addText((t) =>
 			t.setValue(String(s.maxTokens)).onChange(async (v) => {
 				const n = parseInt(v, 10);
 				if (!isNaN(n) && n > 0) {

@@ -1,9 +1,9 @@
 {
 	"id": "home-llm",
-	"name": "Home & LLM",
-	"version": "2.3.0",
+	"name": "Home + AI",
+	"version": "2.4.0",
 	"minAppVersion": "1.7.2",
-	"description": "A home screen with scenic backgrounds and vault stats, note widgets, an AI chat with long-term memory that can search, read and (with your approval) edit notes, and AI spell check.",
+	"description": "A home screen with scenic backgrounds and vault stats, note widgets, an AI chat with memory that can search, read and (with your approval) edit notes, and AI spell check.",
 	"author": "jenx",
 	"isDesktopOnly": false
 }

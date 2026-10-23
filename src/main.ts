@@ -57,6 +57,8 @@ export default class HomeLLMPlugin extends Plugin {
 	daily: DailyNoteConfig = { ...DEFAULT_DAILY };
 	stats!: VaultStats;
 	private lastFile: TFile | null = null;
+	private homeRibbon: HTMLElement | null = null;
+	private chatRibbon: HTMLElement | null = null;
 	private saveChatsSoon = debounce(() => void this.saveChats(), 500, true);
 
 	async onload(): Promise<void> {
@@ -88,7 +90,7 @@ export default class HomeLLMPlugin extends Plugin {
 			}
 			widget.render(host, { app: this.app, plugin: this, component: child, open: (f) => void this.app.workspace.getLeaf(false).openFile(f) });
 		});
-		this.addCommand({ id: "open-memory", name: "Open AI memory note", icon: "brain", callback: () => void this.openMemory() });
+		this.addCommand({ id: "open-memory", name: "Open AI memory note", icon: "brain", checkCallback: this.when("ai", () => void this.openMemory()) });
 		this.addCommand({
 			id: "insert-widget",
 			name: "Insert widget",
@@ -99,30 +101,38 @@ export default class HomeLLMPlugin extends Plugin {
 		this.registerView(HOME_VIEW_TYPE, (leaf) => new HomeView(leaf, this));
 		this.registerView(CHAT_VIEW_TYPE, (leaf) => new ChatView(leaf, this));
 
-		this.addRibbonIcon("home", "Open home", () => void this.openHome());
-		this.addRibbonIcon("bot", "Open AI chat", () => void this.openChat());
+		this.homeRibbon = this.addRibbonIcon("home", "Open home", () => void this.openHome());
+		this.chatRibbon = this.addRibbonIcon("bot", "Open AI chat", () => void this.openChat());
 		if (!Platform.isMobile) this.addRibbonSpacers();
 
-		this.addCommand({ id: "open-home", name: "Open home screen", callback: () => void this.openHome() });
-		this.addCommand({ id: "open-chat", name: "Open AI chat", callback: () => void this.openChat() });
-		this.addCommand({ id: "open-chat-left", name: "Open AI chat in left sidebar", callback: () => void this.openChat("left") });
-		this.addCommand({ id: "open-chat-right", name: "Open AI chat in right sidebar", callback: () => void this.openChat("right") });
-		this.addCommand({ id: "open-chat-tab", name: "Open AI chat in new tab", callback: () => void this.openChat("tab") });
+		this.addCommand({ id: "open-home", name: "Open home screen", checkCallback: this.when("home", () => void this.openHome()) });
+		this.addCommand({ id: "open-chat", name: "Open AI chat", checkCallback: this.when("ai", () => void this.openChat()) });
+		this.addCommand({ id: "open-chat-left", name: "Open AI chat in left sidebar", checkCallback: this.when("ai", () => void this.openChat("left")) });
+		this.addCommand({ id: "open-chat-right", name: "Open AI chat in right sidebar", checkCallback: this.when("ai", () => void this.openChat("right")) });
+		this.addCommand({ id: "open-chat-tab", name: "Open AI chat in new tab", checkCallback: this.when("ai", () => void this.openChat("tab")) });
 		this.addCommand({
 			id: "ask-about-note",
 			name: "Ask AI about current note",
 			checkCallback: (checking) => {
-				if (!this.app.workspace.getActiveFile()) return false;
+				if (!this.settings.aiEnabled || !this.app.workspace.getActiveFile()) return false;
 				if (!checking) void this.openChat(undefined, true);
 				return true;
 			},
 		});
+		this.addCommand({ id: "toggle-home", name: "Turn home screen on or off", callback: () => void this.toggleFeature("home") });
+		this.addCommand({ id: "toggle-ai", name: "Turn AI on or off", callback: () => void this.toggleFeature("ai") });
 		// Spell check shows up in the command palette and, with the core Slash commands plugin on, when you type "/" in a note.
-		this.addCommand({ id: "spell-check", name: "Spell check", icon: "spell-check", editorCallback: (editor) => void proofread(this, editor, this.settings.spellMode) });
-		this.addCommand({ id: "spell-check-list", name: "Spell check: list problems with fixes", icon: "list-checks", editorCallback: (editor) => void proofread(this, editor, "list") });
-		this.addCommand({ id: "spell-check-fix", name: "Spell check: fix everything", icon: "wand-2", editorCallback: (editor) => void proofread(this, editor, "fix") });
+		const spell = (mode: () => "list" | "fix") => (checking: boolean, editor: Editor) => {
+			if (!this.settings.aiEnabled) return false;
+			if (!checking) void proofread(this, editor, mode());
+			return true;
+		};
+		this.addCommand({ id: "spell-check", name: "Spell check", icon: "spell-check", editorCheckCallback: spell(() => this.settings.spellMode) });
+		this.addCommand({ id: "spell-check-list", name: "Spell check: list problems with fixes", icon: "list-checks", editorCheckCallback: spell(() => "list") });
+		this.addCommand({ id: "spell-check-fix", name: "Spell check: fix everything", icon: "wand-2", editorCheckCallback: spell(() => "fix") });
 		this.registerEvent(
 			this.app.workspace.on("editor-menu", (menu, editor) => {
+				if (!this.settings.aiEnabled) return;
 				menu.addItem((it) =>
 					it
 						.setTitle("Spell check")
@@ -140,6 +150,7 @@ export default class HomeLLMPlugin extends Plugin {
 				this.maybeReplaceEmpty(leaf);
 			})
 		);
+		this.applyFeatures();
 		this.registerEvent(this.app.workspace.on("layout-change", () => this.maybeReplaceEmpty(this.app.workspace.getMostRecentLeaf())));
 		// Obsidian may reset body classes while starting up or changing theme, so re-apply after both.
 		this.registerEvent(this.app.workspace.on("css-change", () => activeDocument.body.toggleClass("hl-graph-default-lines", !this.settings.purpleGraph)));
@@ -151,7 +162,7 @@ export default class HomeLLMPlugin extends Plugin {
 				if (leaf.getViewState().type === "home-llm-web") leaf.detach();
 			});
 			void this.placeChats();
-			if (this.settings.openHomeOnStartup) void this.openHome(true);
+			if (this.settings.homeEnabled && this.settings.openHomeOnStartup) void this.openHome(true);
 		});
 	}
 
@@ -168,6 +179,34 @@ export default class HomeLLMPlugin extends Plugin {
 	applyGraphStyle(): void {
 		activeDocument.body.toggleClass("hl-graph-default-lines", !this.settings.purpleGraph);
 		this.app.workspace.trigger("css-change");
+	}
+
+	/** A command check that only offers the command while its feature is switched on. */
+	private when(feature: "home" | "ai", run: () => void): (checking: boolean) => boolean {
+		return (checking) => {
+			if (!(feature === "home" ? this.settings.homeEnabled : this.settings.aiEnabled)) return false;
+			if (!checking) run();
+			return true;
+		};
+	}
+
+	async toggleFeature(feature: "home" | "ai"): Promise<void> {
+		if (feature === "home") this.settings.homeEnabled = !this.settings.homeEnabled;
+		else this.settings.aiEnabled = !this.settings.aiEnabled;
+		await this.saveSettings();
+		this.applyFeatures();
+		const on = feature === "home" ? this.settings.homeEnabled : this.settings.aiEnabled;
+		new Notice(`${feature === "home" ? "Home screen" : "AI"} turned ${on ? "on" : "off"}`);
+	}
+
+	/** Shows or hides each feature's ribbon button and closes its views when switched off. */
+	applyFeatures(): void {
+		const { homeEnabled, aiEnabled } = this.settings;
+		this.homeRibbon?.toggleClass("hl-hidden", !homeEnabled);
+		this.chatRibbon?.toggleClass("hl-hidden", !aiEnabled);
+		if (!homeEnabled) this.app.workspace.detachLeavesOfType(HOME_VIEW_TYPE);
+		if (!aiEnabled) this.app.workspace.detachLeavesOfType(CHAT_VIEW_TYPE);
+		this.refreshHomeViews();
 	}
 
 	/** Opens the AI's memory note in a new tab, creating it if needed. */
@@ -200,6 +239,8 @@ export default class HomeLLMPlugin extends Plugin {
 
 	async loadSettings(): Promise<void> {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, (await this.loadData()) as Partial<HomeLLMSettings> | null);
+		// 2048 was the old default; current models also spend reply tokens thinking, so lift it.
+		if (this.settings.maxTokens === 2048) this.settings.maxTokens = DEFAULT_SETTINGS.maxTokens;
 	}
 
 	async saveSettings(): Promise<void> {
@@ -220,7 +261,7 @@ export default class HomeLLMPlugin extends Plugin {
 				this.chats = Array.isArray(data.chats) ? data.chats : [];
 			}
 		} catch (e) {
-			console.error("Home & LLM: could not read chat history", e);
+			console.error("Home + AI: could not read chat history", e);
 		}
 	}
 
@@ -252,7 +293,7 @@ export default class HomeLLMPlugin extends Plugin {
 
 	/** Shows the home screen in place of Obsidian's blank "New tab" page. */
 	private maybeReplaceEmpty(leaf: WorkspaceLeaf | null): void {
-		if (!this.settings.replaceNewTab || !leaf) return;
+		if (!this.settings.homeEnabled || !this.settings.replaceNewTab || !leaf) return;
 		if (leaf.view?.getViewType() !== "empty") return;
 		if (leaf.getRoot() !== this.app.workspace.rootSplit) return;
 		void leaf.setViewState({ type: HOME_VIEW_TYPE, active: true });

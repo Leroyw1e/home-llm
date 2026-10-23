@@ -5,7 +5,7 @@ import { lineDiff } from "./diff";
 import { memoryPath } from "./memory";
 import { modelFor } from "./providers";
 import { moment } from "./time";
-import { MODEL_SUGGESTIONS, PROVIDER_LABELS, ProviderId } from "./settings";
+import { EFFORT_LABELS, Effort, MODEL_SUGGESTIONS, PROVIDER_LABELS, ProviderId } from "./settings";
 
 export const CHAT_VIEW_TYPE = "home-llm-chat";
 
@@ -221,6 +221,8 @@ export class ChatView extends ItemView {
 		this.modelBtn.empty();
 		setIcon(this.modelBtn.createSpan("hlc-model-icon"), "sparkles");
 		this.modelBtn.createSpan({ cls: "hlc-model-name", text: prettyModel(this.model) });
+		const effort = this.plugin.settings.effort;
+		if (effort !== "default") this.modelBtn.createSpan({ cls: "hlc-model-effort", text: EFFORT_LABELS[effort] });
 		setIcon(this.modelBtn.createSpan("hlc-model-chevron"), "chevron-down");
 		this.modelBtn.setAttr("aria-label", `${PROVIDER_LABELS[this.provider]} · ${this.model}`);
 	}
@@ -255,6 +257,20 @@ export class ChatView extends ItemView {
 				);
 			}
 		});
+		menu.addSeparator();
+		menu.addItem((it) => it.setTitle("Effort").setDisabled(true));
+		for (const e of Object.keys(EFFORT_LABELS) as Effort[]) {
+			menu.addItem((it) =>
+				it
+					.setTitle(EFFORT_LABELS[e])
+					.setChecked(s.effort === e)
+					.onClick(async () => {
+						s.effort = e;
+						await this.plugin.saveSettings();
+						this.updateModelLabel();
+					})
+			);
+		}
 		menu.addSeparator();
 		menu.addItem((it) =>
 			it

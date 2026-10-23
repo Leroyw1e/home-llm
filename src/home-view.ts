@@ -152,7 +152,7 @@ export class HomeView extends ItemView {
 		};
 		chip("file-plus", "New note", () => void this.newFile("md", ""));
 		chip("layout-dashboard", "New canvas", () => void this.newFile("canvas", '{"nodes":[],"edges":[]}'));
-		chip("sparkles", "AI chat", () => void this.plugin.openChat());
+		if (s.aiEnabled) chip("sparkles", "AI chat", () => void this.plugin.openChat());
 		chip("settings", "Settings", () => this.plugin.openSettings(false));
 
 		const grid = page.createDiv("hlh-dash-grid");
@@ -179,7 +179,7 @@ export class HomeView extends ItemView {
 
 		const actions = page.createDiv("hlh-actions");
 		this.action(actions, "file-plus", "New note", "Blank page", "blue", () => void this.newFile("md", ""));
-		this.action(actions, "sparkles", "AI chat", "Ask anything", "purple", () => void this.plugin.openChat());
+		if (s.aiEnabled) this.action(actions, "sparkles", "AI chat", "Ask anything", "purple", () => void this.plugin.openChat());
 		this.action(actions, "layout-dashboard", "New canvas", "Freeform board", "orange", () => void this.newFile("canvas", '{"nodes":[],"edges":[]}'));
 		this.action(actions, "settings", "Settings", "Customise", "green", () => this.plugin.openSettings(false));
 

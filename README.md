@@ -1,4 +1,4 @@
-# Home & LLM
+# Home + AI
 
 A home screen for your Obsidian vault with live vault stats, widgets you can put in any note, an AI chat that lives in a tab or sidebar, and an AI spell and grammar checker. Works on desktop, iPhone and iPad.
 
@@ -33,6 +33,7 @@ Optionally draws the lines between linked notes in purple (on by default; reopen
 - **Works with your notes:** the AI can read the note you have open and, with vault access on (the library button in the chat header), search and read any note to answer you. Small labels under each reply show which notes it searched or read.
 - **Edits only with your permission:** when the AI wants to change or create a note, the chat shows the exact change (removed lines in red, added lines in green) with **Approve** and **Reject**. Nothing is saved until you approve. It can't write to Obsidian's settings folder.
 - Attach the current note as context, copy replies, insert replies into your note, regenerate, and save a chat as a note.
+- **Effort**: choose how hard the AI thinks (model default, low, medium, high, extra high or max) in settings or from the model menu in the chat.
 - **Chat history**: every conversation is saved; search, reopen or delete past chats.
 - **Long-term memory**: when you tell it something lasting (or say "remember that…"), the AI adds a short line to a normal note, `AI Memory.md` by default, and reads that note at the start of every chat. Say "forget that…" to remove something, or edit the note yourself. You can turn memory off, pick another note, or have it ask before saving anything.
 
@@ -43,13 +44,16 @@ Optionally draws the lines between linked notes in purple (on by default; reopen
 - Run it from the command palette, the right-click menu in a note, or by typing `/` with Obsidian's core **Slash commands** plugin turned on.
 - Spelling variants: Australian, British, American, Canadian and New Zealand English.
 
+### On/off switches
+Turn the **home screen** or the **AI features** off in settings (or with the "Turn home screen on or off" and "Turn AI on or off" commands). With AI off, nothing is sent to any AI provider.
+
 ### Ribbon spacers (desktop)
 Adds a few small gaps to the left ribbon so you can group your icons. Hold the command key (control on Windows) to make them easy to see, then drag them like any ribbon icon.
 
 ## Setup
 
-1. Install and enable **Home & LLM** from **Settings → Community plugins**.
-2. Open **Settings → Home & LLM**, choose a provider and paste your API key (not needed for a local server).
+1. Install and enable **Home + AI** from **Settings → Community plugins**.
+2. Open **Settings → Home + AI**, choose a provider and paste your API key (not needed for a local server).
 3. Pick a home style and background under **Home screen**.
 
 ## Commands

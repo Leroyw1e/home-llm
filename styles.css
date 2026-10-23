@@ -1849,3 +1849,17 @@ body:not(.hl-graph-default-lines) .graph-view.color-line-highlight {
 	gap: 8px;
 	padding: 10px 12px;
 }
+
+/* ---------- Feature switches ---------- */
+.side-dock-ribbon-action.hl-hidden {
+	display: none !important;
+}
+.hlc-model-effort {
+	padding: 0 6px;
+	border-radius: 999px;
+	font-size: var(--font-ui-smaller);
+	font-weight: 500;
+	color: var(--interactive-accent);
+	background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+	white-space: nowrap;
+}
