@@ -30,6 +30,37 @@ export interface StatsSummary {
 	attachments: number;
 	longest: { file: TFile; words: number } | null;
 	mostLinked: { file: TFile; links: number } | null;
+	/** Days in a row you've written, up to today (or yesterday, if you haven't written yet today). */
+	streak: number;
+	bestStreak: number;
+	wroteToday: boolean;
+}
+
+/** Most writing days remembered (about two years). */
+const MAX_DAYS = 800;
+
+/** Current and longest run of consecutive days in a sorted list of YYYY-MM-DD dates. */
+export function streaks(days: string[]): { current: number; best: number; today: boolean } {
+	const set = new Set(days);
+	const today = moment().format("YYYY-MM-DD");
+	const wroteToday = set.has(today);
+	let current = 0;
+	for (const d = moment(); ; d.subtract(1, "day")) {
+		const key = d.format("YYYY-MM-DD");
+		if (set.has(key)) current++;
+		// A streak isn't broken until a whole day passes without writing.
+		else if (!(key === today && !wroteToday)) break;
+		if (current > MAX_DAYS) break;
+	}
+	let best = 0;
+	let run = 0;
+	let prev: string | null = null;
+	for (const d of [...set].sort()) {
+		run = prev && moment(d).diff(moment(prev), "days") === 1 ? run + 1 : 1;
+		best = Math.max(best, run);
+		prev = d;
+	}
+	return { current, best: Math.max(best, current), today: wroteToday };
 }
 
 /** Bump when counting rules change, so a day-start total from the old rules isn't compared with new counts. */
@@ -101,14 +132,32 @@ export class VaultStats {
 	constructor(
 		private app: App,
 		/** Day-start word total, so "today" can be worked out; persisted by the plugin. */
-		private baseline: { get: () => WordBaseline | null; set: (b: WordBaseline) => void }
+		private baseline: { get: () => WordBaseline | null; set: (b: WordBaseline) => void },
+		/** Days you wrote on, for the streak; persisted by the plugin. */
+		private days: { get: () => string[] | null; set: (d: string[]) => void } = { get: () => null, set: () => {} }
 	) {}
+
+	private markWritingDay(day = moment().format("YYYY-MM-DD")): void {
+		const days = this.days.get() ?? [];
+		if (days.includes(day)) return;
+		this.days.set([...days, day].sort().slice(-MAX_DAYS));
+	}
 
 	/** Counts every note once. Safe to call repeatedly. */
 	build(): Promise<void> {
 		if (!this.building) {
 			this.building = (async () => {
-				for (const f of this.app.vault.getMarkdownFiles()) this.counts.set(f.path, countText(await this.app.vault.cachedRead(f)));
+				const files = this.app.vault.getMarkdownFiles();
+				for (const f of files) this.counts.set(f.path, countText(await this.app.vault.cachedRead(f)));
+				// The first time, start the streak history from when notes were created and last edited.
+				if (this.days.get() === null) {
+					const seed = new Set<string>();
+					for (const f of files) {
+						seed.add(moment(f.stat.ctime).format("YYYY-MM-DD"));
+						seed.add(moment(f.stat.mtime).format("YYYY-MM-DD"));
+					}
+					this.days.set([...seed].sort().slice(-MAX_DAYS));
+				}
 				this.ready = true;
 				this.notifySoon();
 			})();
@@ -118,7 +167,11 @@ export class VaultStats {
 
 	async onModify(file: TAbstractFile): Promise<void> {
 		if (!this.ready || !(file instanceof TFile) || file.extension !== "md") return;
-		this.counts.set(file.path, countText(await this.app.vault.cachedRead(file)));
+		const before = this.counts.get(file.path)?.words ?? 0;
+		const now = countText(await this.app.vault.cachedRead(file));
+		this.counts.set(file.path, now);
+		// Adding words to a note counts as writing today.
+		if (now.words > before) this.markWritingDay();
 		this.notifySoon();
 	}
 
@@ -192,6 +245,7 @@ export class VaultStats {
 			if (f.stat.ctime >= weekStart) newThisWeek++;
 			if (f.stat.ctime >= monthStart) newThisMonth++;
 		}
+		const streak = streaks(this.days.get() ?? []);
 		const attachments = vault.getFiles().filter((f) => f.extension !== "md" && f.extension !== "canvas").length;
 
 		return {
@@ -210,6 +264,9 @@ export class VaultStats {
 			attachments,
 			longest,
 			mostLinked,
+			streak: streak.current,
+			bestStreak: streak.best,
+			wroteToday: streak.today,
 		};
 	}
 }

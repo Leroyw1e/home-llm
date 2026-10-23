@@ -1,6 +1,6 @@
 {
   "name": "home-llm",
-  "version": "2.5.0",
+  "version": "2.8.0",
   "description": "A home screen for your vault, plus AI chat and spell check.",
   "main": "main.js",
   "private": true,

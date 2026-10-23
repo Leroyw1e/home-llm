@@ -1,6 +1,7 @@
 import { App, Editor, Modal, Notice, Platform, setIcon } from "obsidian";
 import type HomeLLMPlugin from "./main";
 import { modelFor, sendChat } from "./providers";
+import { knownMistakesHint, recordIssues } from "./writing";
 
 /** Longest text sent in one check; longer notes are checked from the start. */
 const PROOF_LIMIT = 12_000;
@@ -88,9 +89,10 @@ export async function proofread(plugin: HomeLLMPlugin, editor: Editor, mode: "li
 			s.provider,
 			modelFor(s, s.provider),
 			[{ role: "user", content: text }],
-			proofSystem(s.spellVariant)
+			proofSystem(s.spellVariant) + knownMistakesHint(plugin)
 		);
 		issues = parseIssues(reply);
+		void recordIssues(plugin, issues);
 	} catch (e) {
 		notice.hide();
 		new Notice("Spell check failed: " + (e instanceof Error ? e.message : String(e)));

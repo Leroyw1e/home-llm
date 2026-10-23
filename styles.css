@@ -1874,13 +1874,24 @@ body:not(.hl-graph-default-lines) .graph-view.color-line-highlight {
 	animation: hl-rec-pulse 1.4s ease-in-out infinite;
 }
 
-.hl-rec-bar {
+.hl-rec-wrap {
 	position: fixed;
 	top: calc(var(--header-height, 40px) + 8px);
 	left: 50%;
 	transform: translateX(-50%);
 	z-index: var(--layer-notice);
 	width: min(640px, calc(100vw - 24px));
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	animation: hl-rec-in 180ms ease-out;
+}
+
+.hl-rec-wrap.is-mobile {
+	top: calc(env(safe-area-inset-top, 0px) + 8px);
+}
+
+.hl-rec-bar {
 	height: 48px;
 	display: flex;
 	align-items: center;
@@ -1890,11 +1901,37 @@ body:not(.hl-graph-default-lines) .graph-view.color-line-highlight {
 	background: var(--background-primary);
 	border: 1px solid var(--background-modifier-border);
 	box-shadow: var(--shadow-l);
-	animation: hl-rec-in 180ms ease-out;
 }
 
-.hl-rec-bar.is-mobile {
-	top: calc(env(safe-area-inset-top, 0px) + 8px);
+/* Live transcript: the last few lines of what's been said, fading in from the top. */
+.hl-rec-live {
+	max-height: calc(3 * 1.5em + 20px);
+	overflow: hidden;
+	padding: 10px 16px;
+	border-radius: 14px;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: var(--shadow-s);
+	font-size: var(--font-ui-small);
+	line-height: 1.5;
+	color: var(--text-normal);
+	-webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px);
+	mask-image: linear-gradient(to bottom, transparent 0, #000 14px);
+}
+
+.hl-rec-live.is-empty {
+	color: var(--text-faint);
+	font-style: italic;
+}
+
+.hl-rec-live.is-error {
+	color: var(--text-error);
+	font-style: normal;
+}
+
+.hl-rec-live-dots {
+	color: var(--text-faint);
+	animation: hl-rec-pulse 1.4s ease-in-out infinite;
 }
 
 .hl-rec-dot {
@@ -1970,8 +2007,693 @@ body:not(.hl-graph-default-lines) .graph-view.color-line-highlight {
 
 @media (prefers-reduced-motion: reduce) {
 	.hl-rec-dot,
+	.hl-rec-live-dots,
 	.side-dock-ribbon-action.hl-recording svg,
-	.hl-rec-bar {
+	.hl-rec-wrap {
 		animation: none;
 	}
+}
+
+/* A feature that can't run because AI is off. */
+.setting-item.hl-setting-off .setting-item-name {
+	color: var(--text-muted);
+}
+
+/* Player that opens when a transcript time is clicked and the note's recording isn't on screen. */
+.hl-mini-player {
+	position: fixed;
+	bottom: calc(var(--status-bar-height, 24px) + 16px);
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: var(--layer-notice);
+	width: min(560px, calc(100vw - 24px));
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 6px 6px 6px 14px;
+	border-radius: 28px;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: var(--shadow-l);
+}
+
+.hl-mini-player.is-mobile {
+	bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
+}
+
+.hl-mini-player-icon {
+	display: flex;
+	color: var(--interactive-accent);
+}
+
+.hl-mini-player-name {
+	flex: none;
+	max-width: 30%;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+
+.hl-mini-player audio {
+	flex: 1;
+	min-width: 0;
+	height: 36px;
+}
+
+/* Transcript times look like small chips rather than links. */
+.markdown-rendered a.external-link[href^="obsidian://home-ai-seek"] {
+	text-decoration: none;
+	padding: 0 6px;
+	border-radius: 6px;
+	background: var(--background-modifier-hover);
+	background-image: none;
+	font-variant-numeric: tabular-nums;
+	font-size: 0.85em;
+	color: var(--text-accent);
+}
+
+/* ---------- Focus timer ---------- */
+
+.hlh-area-focus { grid-area: focus; }
+
+.hlh-dash-grid.has-focus {
+	grid-template-areas:
+		"clock vault focus"
+		"cal recent stats";
+}
+
+@media (max-width: 1000px) {
+	.hlh-dash-grid.has-focus {
+		grid-template-areas:
+			"clock focus"
+			"cal vault"
+			"recent stats";
+	}
+}
+
+@media (max-width: 700px) {
+	.hlh-dash-grid.has-focus {
+		grid-template-areas: "clock" "focus" "stats" "cal" "vault" "recent";
+	}
+}
+
+/* The timer uses one colour everywhere: purple unless changed in settings (set on body as --hl-focus-colour). */
+.hlh-focus-card,
+.hl-focus-ribbon {
+	--hl-focus: var(--hl-focus-colour, #8a5cf5);
+}
+
+.hlh-focus-body {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+	padding: 4px 12px 8px;
+}
+
+.hlh-focus-modes {
+	display: flex;
+	gap: 4px;
+	padding: 3px;
+	border-radius: 999px;
+	background: var(--background-modifier-hover);
+}
+
+.hlh-focus-mode {
+	padding: 3px 10px;
+	height: auto;
+	border-radius: 999px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	background: transparent;
+	box-shadow: none;
+}
+
+.hlh-focus-mode.is-active {
+	color: var(--text-on-accent);
+	background: var(--hl-focus);
+}
+
+.hlh-focus-dial {
+	position: relative;
+	width: 150px;
+	height: 150px;
+}
+
+.hlh-focus-ring {
+	width: 100%;
+	height: 100%;
+	transform: rotate(-90deg);
+}
+
+.hlh-focus-ring circle {
+	fill: none;
+	stroke-width: 7;
+}
+
+.hlh-focus-track {
+	stroke: var(--background-modifier-border);
+}
+
+.hlh-focus-arc {
+	stroke: var(--hl-focus);
+	stroke-linecap: round;
+	transition: stroke-dashoffset 0.9s linear;
+}
+
+.hlh-focus-centre {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+}
+
+.hlh-focus-time {
+	font-size: 2.1em;
+	font-weight: 650;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: -0.02em;
+	color: var(--text-normal);
+}
+
+.hlh-focus-label {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+}
+
+.hlh-focus-controls {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+}
+
+.hlh-focus-btn {
+	width: 36px;
+	height: 36px;
+	padding: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+	background: var(--background-modifier-hover);
+	box-shadow: none;
+	color: var(--text-normal);
+}
+
+.hlh-focus-btn.is-primary {
+	width: 48px;
+	height: 48px;
+	background: var(--hl-focus);
+	color: var(--text-on-accent);
+}
+
+.hlh-focus-dots {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.hlh-focus-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--background-modifier-border);
+}
+
+.hlh-focus-dot.is-done {
+	background: var(--hl-focus);
+}
+
+.hlh-focus-today {
+	margin-left: 4px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+
+/* Modern home: a wide, short card with the dial on the left. */
+.hlh-focus-card.is-compact .hlh-focus-body {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	grid-template-areas:
+		"dial modes"
+		"dial controls"
+		"dial dots";
+	justify-items: start;
+	align-items: center;
+	column-gap: 24px;
+	row-gap: 8px;
+}
+
+.hlh-focus-card.is-compact .hlh-focus-dial {
+	grid-area: dial;
+	width: 120px;
+	height: 120px;
+}
+
+.hlh-focus-card.is-compact .hlh-focus-time {
+	font-size: 1.7em;
+}
+
+.hlh-focus-card.is-compact .hlh-focus-modes { grid-area: modes; }
+.hlh-focus-card.is-compact .hlh-focus-controls { grid-area: controls; }
+.hlh-focus-card.is-compact .hlh-focus-dots { grid-area: dots; }
+
+/* Ribbon button shows the minutes left in a small badge. */
+.side-dock-ribbon-action.hl-focus-ribbon {
+	position: relative;
+}
+
+.side-dock-ribbon-action.hl-focus-ribbon[data-hl-left]::after {
+	content: attr(data-hl-left);
+	position: absolute;
+	right: -2px;
+	bottom: -2px;
+	min-width: 16px;
+	height: 14px;
+	padding: 0 3px;
+	border-radius: 7px;
+	font-size: 9px;
+	font-weight: 700;
+	line-height: 14px;
+	text-align: center;
+	color: var(--text-on-accent);
+	background: var(--text-faint);
+}
+
+.side-dock-ribbon-action.hl-focus-ribbon.is-running {
+	color: var(--hl-focus);
+}
+
+.side-dock-ribbon-action.hl-focus-ribbon.is-running[data-hl-left]::after {
+	background: var(--hl-focus);
+}
+
+/* Tab bar timer: a small pill at the far right of the top tab group's header. */
+.hl-focus-tab {
+	--hl-focus: var(--hl-focus-colour, #8a5cf5);
+	flex: none;
+	align-self: center;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 24px;
+	margin: 0 4px;
+	padding: 0 10px 0 7px;
+	border-radius: 12px;
+	background: color-mix(in srgb, var(--hl-focus) 16%, transparent);
+	color: var(--hl-focus);
+	font-size: var(--font-ui-small);
+	font-weight: 650;
+	font-variant-numeric: tabular-nums;
+	cursor: pointer;
+	-webkit-app-region: no-drag;
+}
+
+.hl-focus-tab:hover {
+	background: color-mix(in srgb, var(--hl-focus) 26%, transparent);
+}
+
+.hl-focus-tab.hl-hidden {
+	display: none;
+}
+
+.hl-focus-tab.is-paused {
+	opacity: 0.7;
+}
+
+.hl-focus-tab-ring {
+	width: 15px;
+	height: 15px;
+	transform: rotate(-90deg);
+}
+
+.hl-focus-tab-ring circle {
+	fill: none;
+	stroke-width: 3;
+}
+
+.hl-focus-tab-track {
+	stroke: color-mix(in srgb, var(--hl-focus) 30%, transparent);
+}
+
+.hl-focus-tab-arc {
+	stroke: var(--hl-focus);
+	stroke-linecap: round;
+	transition: stroke-dashoffset 0.9s linear;
+}
+
+/* ---------- Flashcards and quizzes ---------- */
+
+.hl-study {
+	width: min(620px, 94vw);
+}
+
+.hl-study-progress {
+	height: 4px;
+	border-radius: 2px;
+	background: var(--background-modifier-border);
+	overflow: hidden;
+}
+
+.hl-study-progress-fill {
+	height: 100%;
+	background: var(--interactive-accent);
+	transition: width 0.25s ease;
+}
+
+.hl-study-count {
+	margin: 8px 0 14px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	text-align: right;
+}
+
+.hl-study-card {
+	min-height: 220px;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	gap: 10px;
+	padding: 28px;
+	border-radius: 16px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+	text-align: center;
+	cursor: pointer;
+	user-select: none;
+	animation: hl-study-flip 0.25s ease;
+}
+
+.hl-study-card.is-flipped {
+	border-color: var(--interactive-accent);
+}
+
+.hl-study-side {
+	font-size: var(--font-ui-smaller);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--text-faint);
+}
+
+.hl-study-text {
+	font-size: 1.3em;
+	font-weight: 600;
+	line-height: 1.4;
+	color: var(--text-normal);
+}
+
+.hl-study-front-small {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+
+.hl-study-buttons {
+	display: flex;
+	justify-content: center;
+	gap: 10px;
+	margin-top: 18px;
+}
+
+.hl-study-buttons button {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.hl-study-btn-icon {
+	display: flex;
+}
+
+.hl-study-btn-icon svg {
+	width: 16px;
+	height: 16px;
+}
+
+.hl-study-question {
+	font-size: 1.2em;
+	font-weight: 600;
+	line-height: 1.4;
+	margin-bottom: 14px;
+}
+
+.hl-study-options {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.hl-study-option {
+	height: auto;
+	min-height: 44px;
+	padding: 10px 14px;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	justify-content: flex-start;
+	text-align: left;
+	white-space: normal;
+	border-radius: 10px;
+}
+
+.hl-study-letter {
+	flex: none;
+	width: 24px;
+	height: 24px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+	font-size: var(--font-ui-smaller);
+	font-weight: 700;
+	background: var(--background-modifier-hover);
+}
+
+.hl-study-option.is-right {
+	border-color: var(--color-green);
+	background: rgba(var(--color-green-rgb), 0.15);
+}
+
+.hl-study-option.is-wrong {
+	border-color: var(--color-red);
+	background: rgba(var(--color-red-rgb), 0.15);
+}
+
+.hl-study-option:disabled {
+	opacity: 1;
+	cursor: default;
+}
+
+.hl-study-explain {
+	margin-top: 14px;
+	padding: 10px 14px;
+	border-radius: 10px;
+	background: var(--background-secondary);
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.hl-study-done {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+	padding: 24px 0 4px;
+}
+
+.hl-study-done-icon svg {
+	width: 40px;
+	height: 40px;
+	color: var(--interactive-accent);
+}
+
+.hl-study-score {
+	font-size: 2.4em;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+
+.hl-study-score-label {
+	color: var(--text-muted);
+}
+
+@keyframes hl-study-flip {
+	from {
+		transform: rotateX(25deg);
+		opacity: 0.4;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.hl-study-card,
+	.hlh-focus-arc {
+		animation: none;
+		transition: none;
+	}
+}
+
+/* ---------- Read aloud ---------- */
+
+.hl-reader {
+	position: fixed;
+	bottom: calc(var(--status-bar-height, 24px) + 16px);
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: var(--layer-notice);
+	width: min(520px, calc(100vw - 24px));
+	padding: 12px 14px 0;
+	border-radius: 18px;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: var(--shadow-l);
+	overflow: hidden;
+	animation: hl-rec-in 180ms ease-out;
+}
+
+.hl-reader.is-mobile {
+	bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
+}
+
+.hl-reader-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+	color: var(--text-muted);
+}
+
+.hl-reader-icon {
+	display: flex;
+	color: var(--interactive-accent);
+}
+
+.hl-reader-icon svg {
+	width: 14px;
+	height: 14px;
+}
+
+.hl-reader-title {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.hl-reader-line {
+	margin: 8px 0 10px;
+	min-height: 2.9em;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+	font-size: var(--font-ui-medium);
+	line-height: 1.45;
+	color: var(--text-normal);
+}
+
+.hl-reader-controls {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	padding-bottom: 12px;
+}
+
+.hl-reader-btn.clickable-icon {
+	width: 34px;
+	height: 34px;
+	padding: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+}
+
+.hl-reader-btn.is-primary.clickable-icon {
+	width: 42px;
+	height: 42px;
+	color: var(--text-on-accent);
+	background: var(--interactive-accent);
+}
+
+.hl-reader-speed {
+	height: 28px;
+	padding: 0 10px;
+	border-radius: 14px;
+	font-size: var(--font-ui-smaller);
+	font-variant-numeric: tabular-nums;
+	background: var(--background-modifier-hover);
+	box-shadow: none;
+}
+
+.hl-reader-progress {
+	height: 3px;
+	margin: 0 -14px;
+	background: linear-gradient(to right, var(--interactive-accent) var(--hl-read-progress, 0%), transparent var(--hl-read-progress, 0%));
+}
+
+/* ---------- Writing streak ---------- */
+
+.hls-streak {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 10px 0 4px;
+	padding: 8px 12px;
+	border-radius: 12px;
+	background: color-mix(in srgb, var(--color-orange) 12%, transparent);
+}
+
+.hls-streak-icon {
+	display: flex;
+	color: var(--color-orange);
+}
+
+.hls-streak-icon svg {
+	width: 20px;
+	height: 20px;
+}
+
+.hls-streak.is-done .hls-streak-icon svg {
+	fill: color-mix(in srgb, var(--color-orange) 45%, transparent);
+}
+
+.hls-streak.is-zero {
+	background: var(--background-modifier-hover);
+}
+
+.hls-streak.is-zero .hls-streak-icon {
+	color: var(--text-faint);
+}
+
+.hls-streak-text {
+	flex: 1;
+	min-width: 0;
+}
+
+.hls-streak-num {
+	font-weight: 650;
+	color: var(--text-normal);
+}
+
+.hls-streak-sub {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	white-space: normal;
+}
+
+.hls-streak-best {
+	flex: none;
+	padding: 2px 8px;
+	border-radius: 10px;
+	font-size: var(--font-ui-smaller);
+	font-variant-numeric: tabular-nums;
+	color: var(--text-muted);
+	background: var(--background-modifier-hover);
 }

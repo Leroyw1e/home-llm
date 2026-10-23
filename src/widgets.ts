@@ -1,6 +1,7 @@
 import { App, Component, TFile, TFolder, getAllTags, setIcon } from "obsidian";
 import type HomeLLMPlugin from "./main";
 import { dailyPath, getOrCreateDaily } from "./daily";
+import { FOCUS_LABELS, FocusMode, formatClock } from "./focus";
 import { StatsSummary } from "./stats";
 import { moment } from "./time";
 
@@ -135,6 +136,19 @@ function readingTime(min: number): string {
  * Total word count and other numbers about the vault, kept live as notes change.
  * `compact` shows just the word count and today's change (for small widgets).
  */
+/** The writing streak: days in a row with new words, your best run, and a nudge if today isn't done yet. */
+function streakRow(parent: HTMLElement, s: StatsSummary): void {
+	const row = parent.createDiv("hls-streak" + (s.streak ? "" : " is-zero") + (s.wroteToday ? " is-done" : ""));
+	setIcon(row.createSpan("hls-streak-icon"), "flame");
+	const text = row.createDiv("hls-streak-text");
+	text.createDiv({ cls: "hls-streak-num", text: s.streak === 1 ? "1 day streak" : `${s.streak} day streak` });
+	text.createDiv({
+		cls: "hls-streak-sub",
+		text: s.wroteToday ? "You've written today" : s.streak ? "Write today to keep it going" : "Write today to start a streak",
+	});
+	if (s.bestStreak > 1) row.createDiv({ cls: "hls-streak-best", text: `Best ${s.bestStreak}` });
+}
+
 export function statsCard(parent: HTMLElement, ctx: CardContext, compact = false): void {
 	const { card: el } = card(parent, "bar-chart-3", compact ? "Words" : "Vault stats", "hls-card");
 	const body = el.createDiv("hls-body");
@@ -153,6 +167,7 @@ export function statsCard(parent: HTMLElement, ctx: CardContext, compact = false
 		sub.createSpan({ text: "words in your vault" });
 		const delta = sub.createSpan({ cls: "hls-today", text: `${s.wordsToday >= 0 ? "+" : "−"}${Math.abs(s.wordsToday).toLocaleString()} today` });
 		delta.toggleClass("is-down", s.wordsToday < 0);
+		streakRow(body, s);
 		if (compact) return;
 
 		const grid = body.createDiv("hls-grid");
@@ -209,6 +224,77 @@ export function recentCard(parent: HTMLElement, ctx: CardContext, title = "Recen
 	for (const f of files) fileRow(body, f, ctx.open);
 }
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/** Pomodoro timer: a ring showing time left, start/pause, reset and skip, and today's sessions. */
+export function focusCard(parent: HTMLElement, ctx: CardContext, compact = false): void {
+	const timer = ctx.plugin.focus;
+	const { card: el } = card(parent, "timer", "Focus timer", "hlh-focus-card" + (compact ? " is-compact" : ""));
+	const body = el.createDiv("hlh-focus-body");
+
+	const modes = body.createDiv("hlh-focus-modes");
+	const modeBtns = (Object.keys(FOCUS_LABELS) as FocusMode[]).map((m: FocusMode) => {
+		const b = modes.createEl("button", { cls: "hlh-focus-mode", text: FOCUS_LABELS[m] });
+		b.onclick = () => timer.setMode(m);
+		return [m, b] as const;
+	});
+
+	const dial = body.createDiv("hlh-focus-dial");
+	const svg = dial.createSvg("svg", { attr: { viewBox: "0 0 120 120", class: "hlh-focus-ring" } });
+	const track = document.createElementNS(SVG_NS, "circle");
+	const arc = document.createElementNS(SVG_NS, "circle");
+	for (const [c, cls] of [
+		[track, "hlh-focus-track"],
+		[arc, "hlh-focus-arc"],
+	] as const) {
+		c.setAttribute("cx", "60");
+		c.setAttribute("cy", "60");
+		c.setAttribute("r", "52");
+		c.setAttribute("class", cls);
+		svg.appendChild(c);
+	}
+	const circumference = 2 * Math.PI * 52;
+	arc.setAttribute("stroke-dasharray", String(circumference));
+	const centre = dial.createDiv("hlh-focus-centre");
+	const time = centre.createDiv("hlh-focus-time");
+	const label = centre.createDiv("hlh-focus-label");
+
+	const controls = body.createDiv("hlh-focus-controls");
+	const iconButton = (icon: string, aria: string, fn: () => void, cls = "") => {
+		const b = controls.createEl("button", { cls: "hlh-focus-btn " + cls, attr: { "aria-label": aria } });
+		setIcon(b, icon);
+		b.onclick = fn;
+		return b;
+	};
+	iconButton("rotate-ccw", "Reset", () => timer.reset());
+	const play = iconButton("play", "Start", () => timer.toggle(), "is-primary");
+	iconButton("skip-forward", "Skip to next", () => timer.skip());
+	const dots = body.createDiv("hlh-focus-dots");
+
+	let lastRunning: boolean | null = null;
+	const draw = () => {
+		const st = timer.state;
+		time.setText(formatClock(timer.left));
+		label.setText(timer.running ? FOCUS_LABELS[st.mode] : timer.active ? "Paused" : FOCUS_LABELS[st.mode]);
+		arc.setAttribute("stroke-dashoffset", String(circumference * timer.progress));
+		el.toggleClass("is-running", timer.running);
+		el.toggleClass("is-break", st.mode !== "focus");
+		for (const [m, b] of modeBtns) b.toggleClass("is-active", m === st.mode);
+		if (lastRunning !== timer.running) {
+			lastRunning = timer.running;
+			setIcon(play, timer.running ? "pause" : "play");
+			play.setAttr("aria-label", timer.running ? "Pause" : "Start");
+		}
+		const every = ctx.plugin.settings.focusLongEvery;
+		dots.empty();
+		const round = st.done % every;
+		for (let i = 0; i < every; i++) dots.createSpan({ cls: "hlh-focus-dot" + (i < round || (round === 0 && st.done > 0) ? " is-done" : "") });
+		dots.createSpan({ cls: "hlh-focus-today", text: `${st.done} today` });
+	};
+	draw();
+	ctx.component.register(timer.subscribe(draw));
+}
+
 /** Widgets you can put in any note with a `home-widget` code block. */
 export const WIDGETS: Record<string, { label: string; icon: string; render: (parent: HTMLElement, ctx: CardContext) => void }> = {
 	stats: { label: "Vault stats", icon: "bar-chart-3", render: (p, c) => statsCard(p, c) },
@@ -217,4 +303,5 @@ export const WIDGETS: Record<string, { label: string; icon: string; render: (par
 	calendar: { label: "Calendar", icon: "calendar", render: calendarCard },
 	vault: { label: "Vault summary", icon: "vault", render: vaultCard },
 	recent: { label: "Recent notes", icon: "history", render: (p, c) => recentCard(p, c) },
+	focus: { label: "Focus timer", icon: "timer", render: (p, c) => focusCard(p, c) },
 };

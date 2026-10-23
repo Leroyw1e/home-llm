@@ -1,8 +1,11 @@
-import { App, Platform, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, Platform, PluginSettingTab, Setting } from "obsidian";
 import type HomeLLMPlugin from "./main";
 import { SCENE_LABELS } from "./scenes";
+import type { FocusState } from "./focus";
 import type { WordBaseline } from "./stats";
-import { TRANSCRIBER_LABELS, type Transcriber } from "./voice";
+import type { WritingLog } from "./writing";
+import { Reader, voices } from "./speak";
+import { DEFAULT_TRANSCRIBE_MODEL, TRANSCRIBER_LABELS, type Transcriber } from "./voice";
 
 export type ProviderId = "anthropic" | "openai" | "openrouter" | "custom";
 export type ChatLocation = "left" | "right" | "tab";
@@ -18,10 +21,55 @@ export const EFFORT_LABELS: Record<Effort, string> = {
 	max: "Max",
 };
 
+export type Feature = "home" | "ai" | "chat" | "memory" | "spell" | "profile" | "study" | "voice" | "read" | "focus" | "widgets" | "graph";
+
+/** Every main feature's on/off switch, in the order shown under Features in settings. */
+export const FEATURES: { id: Feature; key: keyof HomeLLMSettings & `${string}${"Enabled" | "Graph"}`; name: string; desc: string; needsAI?: boolean }[] = [
+	{ id: "home", key: "homeEnabled", name: "Home screen", desc: "The home page and its ribbon button." },
+	{ id: "ai", key: "aiEnabled", name: "AI", desc: "Everything that uses AI. When off, nothing is sent to any AI provider." },
+	{ id: "chat", key: "chatEnabled", name: "AI chat", desc: "The chat in a sidebar or tab, and its ribbon button.", needsAI: true },
+	{ id: "memory", key: "memoryEnabled", name: "AI memory", desc: "The chat remembers things about you in a note you can see and edit.", needsAI: true },
+	{ id: "spell", key: "spellEnabled", name: "Spell check", desc: "AI spelling, punctuation and grammar check.", needsAI: true },
+	{ id: "profile", key: "writingLogEnabled", name: "Writing profile", desc: "Spell check keeps a list of your common mistakes, and the AI can describe how you write in a note.", needsAI: true },
+	{ id: "study", key: "studyEnabled", name: "Flashcards and quizzes", desc: "Make flashcards or a quiz from any note to study with.", needsAI: true },
+	{ id: "voice", key: "voiceEnabled", name: "Voice notes", desc: "A microphone button that records into a new note. With AI on, you also get a transcript and summary." },
+	{ id: "read", key: "readEnabled", name: "Read aloud", desc: "Hear a note read to you, using your device's own voices (works offline, free)." },
+	{ id: "focus", key: "focusEnabled", name: "Focus timer", desc: "A Pomodoro timer on the home screen, in the left ribbon, in the tab bar while it runs, and in the menu bar." },
+	{ id: "widgets", key: "widgetsEnabled", name: "Note widgets", desc: "Live clocks, calendars, word counts and stats inside notes." },
+	{ id: "graph", key: "purpleGraph", name: "Purple graph links", desc: "Draw the lines between linked notes in purple. Reopen graph view to see the change." },
+];
+
 export interface HomeLLMSettings {
 	/** Feature switches: the home screen (and its ribbon button), and everything AI. */
 	homeEnabled: boolean;
 	aiEnabled: boolean;
+	/** Separate switches for AI features (they also need aiEnabled on). */
+	chatEnabled: boolean;
+	spellEnabled: boolean;
+	studyEnabled: boolean;
+	/** Writing profile: spell check's findings, and the note the AI writes about how you write. */
+	writingLogEnabled: boolean;
+	writingLog: WritingLog | null;
+	writingProfileNote: string;
+	/** Read aloud: the voice's name ("" picks the best one for your spelling) and speed. */
+	readEnabled: boolean;
+	readVoice: string;
+	readRate: number;
+	/** Pomodoro timer: lengths in minutes, and its saved state. */
+	focusEnabled: boolean;
+	focusMinutes: number;
+	focusShortBreak: number;
+	focusLongBreak: number;
+	focusLongEvery: number;
+	focusSound: boolean;
+	focusAutoStart: boolean;
+	/** Colour of the timer's ring and buttons. */
+	focusColour: string;
+	/** Show the timer in the Mac menu bar (desktop). */
+	focusMenuBar: boolean;
+	focusState: FocusState | null;
+	/** Live widgets in notes (```home-widget``` blocks). */
+	widgetsEnabled: boolean;
 	/** Voice notes: the mic button that records into a new note. */
 	voiceEnabled: boolean;
 	/** Who turns speech into text ("auto" picks whichever key is set). */
@@ -29,6 +77,12 @@ export interface HomeLLMSettings {
 	/** Transcription model; empty uses the provider's default. */
 	voiceModel: string;
 	voiceFolder: string;
+	/** Show what's being said under the recording bar while recording. */
+	voiceLive: boolean;
+	/** Start each transcript paragraph with a time you can click to hear that part. */
+	voiceTimestamps: boolean;
+	/** Google Gemini key, used only for voice notes. */
+	geminiKey: string;
 	provider: ProviderId;
 	anthropicKey: string;
 	anthropicModel: string;
@@ -63,6 +117,8 @@ export interface HomeLLMSettings {
 	memoryEnabled: boolean;
 	memoryNote: string;
 	memoryAskFirst: boolean;
+	/** Days you wrote on (YYYY-MM-DD), for the writing streak. */
+	writingDays: string[] | null;
 	/** Total words at the first count today, for the "today" figure. */
 	wordBaseline: WordBaseline | null;
 }
@@ -70,10 +126,33 @@ export interface HomeLLMSettings {
 export const DEFAULT_SETTINGS: HomeLLMSettings = {
 	homeEnabled: true,
 	aiEnabled: true,
+	chatEnabled: true,
+	spellEnabled: true,
+	studyEnabled: true,
+	writingLogEnabled: true,
+	writingLog: null,
+	writingProfileNote: "Writing profile.md",
+	readEnabled: true,
+	readVoice: "",
+	readRate: 1,
+	focusEnabled: true,
+	focusMinutes: 25,
+	focusShortBreak: 5,
+	focusLongBreak: 15,
+	focusLongEvery: 4,
+	focusSound: true,
+	focusAutoStart: false,
+	focusColour: "#8a5cf5",
+	focusMenuBar: true,
+	focusState: null,
+	widgetsEnabled: true,
 	voiceEnabled: true,
 	voiceProvider: "auto",
 	voiceModel: "",
 	voiceFolder: "Voice notes",
+	geminiKey: "",
+	voiceLive: true,
+	voiceTimestamps: true,
 	provider: "anthropic",
 	anthropicKey: "",
 	anthropicModel: "claude-sonnet-5-5",
@@ -106,6 +185,7 @@ export const DEFAULT_SETTINGS: HomeLLMSettings = {
 	memoryEnabled: true,
 	memoryNote: "AI Memory.md",
 	memoryAskFirst: false,
+	writingDays: null,
 	wordBaseline: null,
 };
 
@@ -176,37 +256,27 @@ export class HomeLLMSettingTab extends PluginSettingTab {
 				);
 
 		heading("Features");
-		new Setting(containerEl)
-			.setName("Home screen")
-			.setDesc("The home page, its ribbon button and commands. Widgets in notes keep working either way.")
-			.addToggle((t) =>
-				t.setValue(s.homeEnabled).onChange(async (v) => {
-					s.homeEnabled = v;
-					await save();
-					this.plugin.applyFeatures();
-				})
-			);
-		new Setting(containerEl)
-			.setName("AI")
-			.setDesc("The AI chat, spell check and memory. When off, nothing is sent to any AI provider.")
-			.addToggle((t) =>
-				t.setValue(s.aiEnabled).onChange(async (v) => {
-					s.aiEnabled = v;
-					await save();
-					this.plugin.applyFeatures();
-				})
-			);
-
-		new Setting(containerEl)
-			.setName("Voice notes")
-			.setDesc("A microphone button that records into a new note. With AI on, the recording is turned into a transcript and notes.")
-			.addToggle((t) =>
-				t.setValue(s.voiceEnabled).onChange(async (v) => {
-					s.voiceEnabled = v;
-					await save();
-					this.plugin.applyFeatures();
-				})
-			);
+		// Rows for features that need AI, so they can show when the AI switch makes them unavailable.
+		const needsAI: { row: Setting; desc: string }[] = [];
+		const showAIState = () => {
+			for (const { row, desc } of needsAI) {
+				row.setDesc(s.aiEnabled ? desc : `${desc} Turn on AI to use this.`);
+				row.settingEl.toggleClass("hl-setting-off", !s.aiEnabled);
+			}
+		};
+		for (const f of FEATURES) {
+			const row = new Setting(containerEl)
+				.setName(f.name)
+				.setDesc(f.desc)
+				.addToggle((t) =>
+					t.setValue(s[f.key]).onChange(async (v) => {
+						await this.plugin.setFeature(f.id, v);
+						if (f.id === "ai") showAIState();
+					})
+				);
+			if (f.needsAI) needsAI.push({ row, desc: f.desc });
+		}
+		showAIState();
 
 		heading("AI provider");
 		new Setting(containerEl)
@@ -299,9 +369,10 @@ export class HomeLLMSettingTab extends PluginSettingTab {
 		});
 
 		heading("Voice notes");
+		keyField("Gemini API key", "geminiKey").setDesc("Gemini listens to your recording and writes the transcript and summary, then Claude names the note. You can get a free key from Google.");
 		new Setting(containerEl)
 			.setName("Transcription")
-			.setDesc("Claude can't listen to audio, so another service turns speech into text with the keys above. Automatic uses OpenAI if it has a key, otherwise the other providers. Your default AI model then writes the notes.")
+			.setDesc("Claude can't listen to audio, so another service turns speech into text. Automatic uses Gemini if it has a key, then the other keys (with Claude writing the summary).")
 			.addDropdown((d) => {
 				for (const [v, label] of Object.entries(TRANSCRIBER_LABELS)) d.addOption(v, label);
 				d.setValue(s.voiceProvider).onChange(async (v) => {
@@ -309,8 +380,114 @@ export class HomeLLMSettingTab extends PluginSettingTab {
 					await save();
 				});
 			});
-		textField("Transcription model", "voiceModel", "Leave empty for the default: gpt-4o-transcribe on OpenAI, google/gemini-2.5-flash on OpenRouter, whisper-1 on a custom server.");
+		textField("Transcription model", "voiceModel", `Leave empty for the default: ${DEFAULT_TRANSCRIBE_MODEL.gemini} on Gemini, ${DEFAULT_TRANSCRIBE_MODEL.openai} on OpenAI.`);
+		toggle("Live transcript", "voiceLive", "Show what you're saying under the recording bar as you talk. Sends short clips while you speak, so it costs a little extra.");
+		toggle("Timestamps", "voiceTimestamps", "Start each paragraph of the transcript with a time. Click it to hear that part of the recording.");
 		textField("Voice notes folder", "voiceFolder", "Recordings go wherever Obsidian puts attachments.");
+
+		heading("Read aloud");
+		const voiceRow = new Setting(containerEl).setName("Voice").setDesc("Your device's built-in voices. For the most natural sound, download a premium voice in your system's spoken content settings.");
+		const fillVoices = () => {
+			voiceRow.controlEl.empty();
+			voiceRow.addDropdown((d) => {
+				d.addOption("", "Automatic (matches your spelling)");
+				const list = voices()
+					.filter((v) => v.lang.startsWith("en"))
+					.sort((a, b) => a.lang.localeCompare(b.lang) || a.name.localeCompare(b.name));
+				for (const v of list) d.addOption(v.name, `${v.name} (${v.lang})`);
+				d.setValue(list.some((v) => v.name === s.readVoice) ? s.readVoice : "").onChange(async (v) => {
+					s.readVoice = v;
+					await save();
+				});
+			});
+			voiceRow.addExtraButton((b) =>
+				b
+					.setIcon("play")
+					.setTooltip("Try this voice")
+					.onClick(() => this.plugin.reader.start("Hi! This is how your notes will sound when I read them to you.", "Voice test"))
+			);
+		};
+		if (Reader.supported()) {
+			fillVoices();
+			if (!voices().length) speechSynthesis.addEventListener("voiceschanged", fillVoices, { once: true });
+		} else voiceRow.setDesc("Reading aloud isn't available on this device.");
+		new Setting(containerEl).setName("Speed").addDropdown((d) => {
+			for (const r of [0.75, 1, 1.25, 1.5, 2]) d.addOption(String(r), `${r}×`);
+			d.setValue(String(s.readRate)).onChange(async (v) => {
+				s.readRate = Number(v);
+				await save();
+			});
+		});
+
+		heading("Focus timer");
+		const minutes = (name: string, key: "focusMinutes" | "focusShortBreak" | "focusLongBreak" | "focusLongEvery", min: number, max: number, unit = "minutes") => {
+			const row = new Setting(containerEl).setName(name).setDesc(`${s[key]} ${unit}`);
+			row.addSlider((sl) =>
+				sl
+					.setLimits(min, max, 1)
+					.setValue(s[key])
+					.onChange(async (v) => {
+						s[key] = v;
+						row.setDesc(`${v} ${unit}`);
+						await save();
+						this.plugin.focus.refresh();
+					})
+			);
+		};
+		minutes("Focus length", "focusMinutes", 5, 90);
+		minutes("Short break", "focusShortBreak", 1, 30);
+		minutes("Long break", "focusLongBreak", 5, 60);
+		minutes("Long break after", "focusLongEvery", 2, 8, "focus sessions");
+		toggle("Sound when time's up", "focusSound");
+		toggle("Start the next session by itself", "focusAutoStart");
+		new Setting(containerEl)
+			.setName("Timer colour")
+			.addColorPicker((c) =>
+				c.setValue(s.focusColour).onChange(async (v) => {
+					s.focusColour = v;
+					await save();
+					this.plugin.applyFocusColour();
+				})
+			)
+			.addExtraButton((b) =>
+				b
+					.setIcon("rotate-ccw")
+					.setTooltip("Back to purple")
+					.onClick(async () => {
+						s.focusColour = DEFAULT_SETTINGS.focusColour;
+						await save();
+						this.plugin.applyFocusColour();
+						this.plugin.focus.refresh();
+					})
+			);
+		if (Platform.isDesktopApp)
+			new Setting(containerEl)
+				.setName("Show in the menu bar")
+				.setDesc("Puts the timer at the top of your screen with the time left, so you can see and control it from any app.")
+				.addToggle((tg) =>
+					tg.setValue(s.focusMenuBar).onChange(async (v) => {
+						s.focusMenuBar = v;
+						await save();
+						this.plugin.applyFeatures();
+					})
+				);
+
+		heading("Writing profile");
+		textField("Writing profile note", "writingProfileNote", "The AI describes how you write here, with a table of the words you most often misspell. The table updates after every spell check.");
+		new Setting(containerEl)
+			.setName("Update my writing profile")
+			.setDesc("Reads your recent notes and spell check history, then rewrites the profile. Your words are sent to your AI provider.")
+			.addButton((b) => b.setButtonText("Update").setCta().onClick(() => void this.plugin.updateWritingProfile()));
+		new Setting(containerEl)
+			.setName("Clear mistake history")
+			.setDesc(`${Object.keys(s.writingLog?.spelling ?? {}).length} misspelt words and ${s.writingLog?.other.length ?? 0} other problems recorded from ${s.writingLog?.checks ?? 0} spell checks.`)
+			.addButton((b) =>
+				b.setButtonText("Clear").onClick(async () => {
+					s.writingLog = null;
+					await save();
+					new Notice("Mistake history cleared");
+				})
+			);
 
 		heading("Chat");
 		new Setting(containerEl)
@@ -336,12 +513,7 @@ export class HomeLLMSettingTab extends PluginSettingTab {
 		textField("Saved chats folder", "chatSaveFolder");
 
 		heading("Memory");
-		toggle(
-			"Remember things about me",
-			"memoryEnabled",
-			"The AI reads your memory note at the start of every chat, and adds short facts when you tell it something lasting or ask it to remember. Its contents are sent to your AI provider with each chat."
-		);
-		textField("Memory note", "memoryNote", "A normal note you can open, edit or clear at any time.");
+		textField("Memory note", "memoryNote", "The AI reads this note at the start of every chat and adds short facts when you tell it something lasting. Its contents are sent to your AI provider with each chat. You can open, edit or clear it at any time.");
 		toggle("Ask before remembering", "memoryAskFirst", "Show each new memory for approval before it's saved.");
 		new Setting(containerEl).setName("Open memory note").addButton((b) => b.setButtonText("Open").onClick(() => void this.plugin.openMemory()));
 
@@ -382,18 +554,6 @@ export class HomeLLMSettingTab extends PluginSettingTab {
 					await refresh();
 				})
 		);
-
-		heading("Graph view");
-		new Setting(containerEl)
-			.setName("Purple links")
-			.setDesc("Draw the lines between linked notes in purple. Close and reopen graph view to see the change.")
-			.addToggle((t) =>
-				t.setValue(s.purpleGraph).onChange(async (v) => {
-					s.purpleGraph = v;
-					await save();
-					this.plugin.applyGraphStyle();
-				})
-			);
 
 		heading("Widgets");
 		new Setting(containerEl)

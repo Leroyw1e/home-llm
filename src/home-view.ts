@@ -3,7 +3,7 @@ import type HomeLLMPlugin from "./main";
 import { OBSIDIAN_LOGO, svgEl } from "./logo";
 import { HILLS_SVG, SCENES, Scene, autoScene, rng, setPeakScale } from "./scenes";
 import { moment } from "./time";
-import { CardContext, calendarCard, clockCard, fileRow, greeting, recentCard, renderTime, statsCard, vaultCard } from "./widgets";
+import { CardContext, calendarCard, clockCard, fileRow, focusCard, greeting, recentCard, renderTime, statsCard, vaultCard } from "./widgets";
 
 export const HOME_VIEW_TYPE = "home-llm-home";
 
@@ -152,10 +152,11 @@ export class HomeView extends ItemView {
 		};
 		chip("file-plus", "New note", () => void this.newFile("md", ""));
 		chip("layout-dashboard", "New canvas", () => void this.newFile("canvas", '{"nodes":[],"edges":[]}'));
-		if (s.aiEnabled) chip("sparkles", "AI chat", () => void this.plugin.openChat());
+		if (this.plugin.isOn("chat")) chip("sparkles", "AI chat", () => void this.plugin.openChat());
 		chip("settings", "Settings", () => this.plugin.openSettings(false));
 
-		const grid = page.createDiv("hlh-dash-grid");
+		const focus = this.plugin.isOn("focus");
+		const grid = page.createDiv("hlh-dash-grid" + (focus ? " has-focus" : ""));
 		// Fixed grid areas so rows line up: clock|vault on top, calendar|recent below, stats down the right.
 		const area = (name: string) => grid.createDiv("hlh-area hlh-area-" + name);
 		clockCard(area("clock"), ctx);
@@ -163,6 +164,7 @@ export class HomeView extends ItemView {
 		vaultCard(area("vault"), ctx);
 		if (s.showRecent) recentCard(area("recent"), ctx);
 		statsCard(area("stats"), ctx);
+		if (focus) focusCard(area("focus"), ctx);
 	}
 
 	private renderModern(page: HTMLElement, ctx: CardContext): void {
@@ -179,9 +181,11 @@ export class HomeView extends ItemView {
 
 		const actions = page.createDiv("hlh-actions");
 		this.action(actions, "file-plus", "New note", "Blank page", "blue", () => void this.newFile("md", ""));
-		if (s.aiEnabled) this.action(actions, "sparkles", "AI chat", "Ask anything", "purple", () => void this.plugin.openChat());
+		if (this.plugin.isOn("chat")) this.action(actions, "sparkles", "AI chat", "Ask anything", "purple", () => void this.plugin.openChat());
 		this.action(actions, "layout-dashboard", "New canvas", "Freeform board", "orange", () => void this.newFile("canvas", '{"nodes":[],"edges":[]}'));
 		this.action(actions, "settings", "Settings", "Customise", "green", () => this.plugin.openSettings(false));
+
+		if (this.plugin.isOn("focus")) focusCard(page, ctx, true);
 
 		const cols = page.createDiv("hlh-columns");
 		if (s.showRecent) recentCard(cols, ctx, "Jump back in");

@@ -9,7 +9,7 @@ A home screen for your Obsidian vault with live vault stats, widgets you can put
 - Two styles:
   - **Modern**: greeting and clock, note search, quick action tiles, your recent notes and vault stats.
   - **Dashboard**: logo and title, search, quick actions, clock, calendar, vault summary, recent notes and vault stats.
-- **Vault stats**, kept up to date as you write. Word counts cover your writing only: frontmatter, `%%comments%%` and plugin data (Excalidraw drawings, Dataview queries) are skipped, and Sheet Plus spreadsheets count the text in their cells. Stats include total words and words written today, characters, words per note, time to read everything, links, notes added this week and month, unlinked notes, attachments, task progress, and your longest and most-linked notes.
+- **Vault stats**, kept up to date as you write. Word counts cover your writing only: frontmatter, `%%comments%%` and plugin data (Excalidraw drawings, Dataview queries) are skipped, and Sheet Plus spreadsheets count the text in their cells. Stats include total words and words written today, your writing streak (days in a row you've written, and your best), characters, words per note, time to read everything, links, notes added this week and month, unlinked notes, attachments, task progress, and your longest and most-linked notes.
 - Backgrounds: accent glow, plain, or illustrated scenes (night sky with cabin, moonlit lake, aurora, sunset dunes, ocean dawn, sunny meadow, rainy city), plus **Auto**, which changes scene with the time of day. Scenes are drawn in code at your window size, with no image files, and respect the system's reduce-motion setting.
 - The calendar opens or creates daily notes using your core **Daily notes** folder, date format and template.
 
@@ -22,7 +22,7 @@ stats
 ```
 ````
 
-Widgets: `stats` (vault stats), `words` (word count), `clock`, `calendar`, `vault` (vault summary) and `recent` (recent notes). A note with widgets also shows them on a canvas.
+Widgets: `stats` (vault stats), `words` (word count), `clock`, `calendar`, `vault` (vault summary), `recent` (recent notes) and `focus` (focus timer). A note with widgets also shows them on a canvas.
 
 ### Graph view
 Optionally draws the lines between linked notes in purple (on by default; reopen graph view after changing it).
@@ -46,12 +46,34 @@ Optionally draws the lines between linked notes in purple (on by default; reopen
 
 ### Voice notes
 - Press the **microphone** in the left ribbon (or run "Record voice note") to start recording. A bar across the top of the window shows a live audio line, the time, and **pause** and **stop** buttons.
-- When you stop, a new note opens with the recording in it. With AI on, the recording is turned into text and your AI model writes a title, summary, key points and action items, followed by the full transcript.
-- Claude can't listen to audio, so the speech-to-text step uses **OpenAI** (gpt-4o-transcribe), an audio model on **OpenRouter**, or your own Whisper-compatible server. Add one of those keys in settings; the notes are then written by whichever model you normally use.
+- When you stop, a new note opens with the recording, a **Summary** and the full **Transcript**, and **Claude names the note**.
+- **Google Gemini** listens to the recording and writes the transcript and summary (add a Gemini API key under Voice notes in settings). Claude can't listen to audio, so without a Gemini key the transcript comes from **OpenAI**, an **OpenRouter** audio model or your own Whisper server, and **Claude** writes the summary.
+- **Live transcript:** while you record, what you're saying appears under the bar, a few seconds behind (turn it off under Voice notes to save the extra requests).
+- **Timestamps:** each paragraph of the transcript starts with a time. Click it to hear that part of the recording.
 - The recording is always kept in your attachments folder, so nothing is lost if a step fails. Works on desktop, iPhone and iPad (allow microphone access when asked).
 
+### Flashcards and quizzes
+- Run "Make flashcards from this note" or "Make a quiz from this note" (or right-click a note in the file list).
+- Flashcards: flip each card, then mark it "Got it" or "Again"; cards you miss come back until you know them.
+- Quiz: multiple choice with an explanation after each answer, and a score at the end.
+- Keep either as a note. Flashcard notes use the `question::answer` format the Spaced Repetition plugin reads.
+
+### Focus timer
+- A Pomodoro timer: 25 minutes of focus, 5-minute breaks, and a 15-minute break after every 4 sessions (all adjustable).
+- On the home screen as a card, in the left ribbon (click to start or pause, right-click for more; a badge shows the minutes left), at the far right of the tab bar while it runs, and in the Mac menu bar (desktop) so you can see and control it from any app.
+- Purple by default; pick any colour in settings.
+- Plays a soft chime and shows a system notification when time's up, even when Obsidian isn't in front. Keeps going if you restart Obsidian, and counts the sessions you finish each day. Add it to any note with the `focus` widget.
+
+### Read aloud
+- Run "Read this note aloud", right-click in a note, or right-click a note in the file list. Reads the selection if there is one.
+- Uses your device's own voices (free and offline), picking one that matches your spelling choice. A bar at the bottom shows the sentence being read, with pause, skip back or forward, speed and stop.
+
+### Writing profile
+- Spell check keeps a list of the words you most often misspell, and checks extra carefully for them next time.
+- Run "Update my writing profile" and the AI reads your recent notes and spell-check history, then writes a note describing how you write: your style, strengths, habits to watch and tips, plus a table of your common spelling mistakes that updates after every spell check.
+
 ### On/off switches
-Turn the **home screen**, **voice notes** or the **AI features** off in settings (or with the "Turn home screen on or off" and "Turn AI on or off" commands). With AI off, nothing is sent to any AI provider.
+Every main feature has its own switch under **Features** in settings, and a "Turn … on or off" command: home screen, AI, AI chat, AI memory, spell check, writing profile, flashcards and quizzes, voice notes, read aloud, focus timer, note widgets and purple graph links. The **AI** switch turns off everything that uses AI at once; with it off, nothing is sent to any AI provider.
 
 ### Ribbon spacers (desktop)
 Adds a few small gaps to the left ribbon so you can group your icons. Hold the command key (control on Windows) to make them easy to see, then drag them like any ribbon icon.
@@ -76,6 +98,11 @@ Adds a few small gaps to the left ribbon so you can group your icons. Hold the c
 | Open AI memory note | Opens the note the AI remembers things in |
 | Record voice note (start or stop) | Starts a recording, or stops it and makes the note |
 | Pause or resume recording | Pauses or resumes the current recording |
+| Make flashcards from this note | Flashcards to study, which you can keep as a note |
+| Make a quiz from this note | A multiple-choice quiz with a score |
+| Start or pause focus timer | Starts or pauses the Pomodoro timer (also reset and skip) |
+| Read this note aloud | Reads the note (or selection) to you |
+| Update my writing profile | Has the AI describe how you write, in a note |
 
 ## Privacy and network use
 
@@ -84,7 +111,8 @@ This plugin needs an account with an AI provider to use chat, spell check and vo
 - **What is sent:** your chat messages, the note you attach, notes the AI reads or searches while answering (only with vault access on, except the open note), and the text you spell check are sent to the AI provider you choose: `api.anthropic.com`, `api.openai.com`, `openrouter.ai`, or the custom server address you enter. Nothing is sent until you send a message or run spell check.
 - **API keys** are stored in this plugin's `data.json` inside your vault's config folder. If you sync your vault, the keys sync too.
 - **Chat history** is stored in `chats.json` in the same folder, and never leaves your device except through your own vault sync.
-- **Voice notes**: recordings are saved in your vault. With AI on, the audio is sent to the transcription service you chose (`api.openai.com`, `openrouter.ai` or your custom server), and the transcript to your AI provider. The microphone is only on while the recording bar is showing.
+- **Voice notes**: recordings are saved in your vault. With live transcript on, short clips are sent while you speak. With AI on, the audio is sent to the transcription service you chose (`generativelanguage.googleapis.com` for Gemini, `api.openai.com`, `openrouter.ai` or your custom server), and the transcript to your AI provider (Claude, if you have an Anthropic key) to name the note. The microphone is only on while the recording bar is showing.
+- **Writing profile**: when you update it, samples of your recent notes and your spell-check history are sent to your AI provider. The mistake list itself stays in the plugin's data file.
 - **Memory**: with memory on, the contents of your memory note are sent to your AI provider at the start of each chat.
 - There is **no telemetry, analytics or tracking**, and the plugin doesn't load anything from the internet other than the AI requests above.
 

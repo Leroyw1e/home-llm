@@ -486,7 +486,7 @@ export class ChatView extends ItemView {
 				{
 					vaultAccess: this.plugin.settings.vaultAccess,
 					currentFile: this.plugin.lastMarkdownFile(),
-					memory: this.plugin.settings.memoryEnabled ? { path: memoryPath(this.plugin.settings.memoryNote), askFirst: this.plugin.settings.memoryAskFirst } : null,
+					memory: this.plugin.isOn("memory") ? { path: memoryPath(this.plugin.settings.memoryNote), askFirst: this.plugin.settings.memoryAskFirst } : null,
 				},
 				{
 					onActivity: (a) => {
