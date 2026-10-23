@@ -1,0 +1,24 @@
+{
+  "name": "home-llm",
+  "version": "2.3.0",
+  "description": "A home screen for your vault, plus AI chat and spell check.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "lint": "eslint src",
+    "version": "node version-bump.mjs && git add manifest.json versions.json"
+  },
+  "author": "jenx",
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.13.0",
+    "eslint-plugin-obsidianmd": "^0.4.2",
+    "obsidian": "^1.14.4",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.0"
+  }
+}
