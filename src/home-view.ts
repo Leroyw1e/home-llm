@@ -3,7 +3,7 @@ import type HomeLLMPlugin from "./main";
 import { OBSIDIAN_LOGO, svgEl } from "./logo";
 import { HILLS_SVG, SCENES, Scene, autoScene, rng, setPeakScale } from "./scenes";
 import { moment } from "./time";
-import { CardContext, calendarCard, clockCard, fileRow, focusCard, greeting, recentCard, renderTime, statsCard, vaultCard } from "./widgets";
+import { CardContext, fileRow, focusCard, greeting, recentCard, renderTime, statsCard, vaultCard } from "./widgets";
 
 export const HOME_VIEW_TYPE = "home-llm-home";
 
@@ -64,6 +64,7 @@ export class HomeView extends ItemView {
 		root.empty();
 		for (const c of Array.from(root.classList)) if (c.startsWith("hlh-")) root.removeClass(c);
 		root.addClass("home-llm-home");
+		root.toggleClass("hlh-still", s.lowPower || !s.animatedBackgrounds);
 		root.toggleClass("is-mobile", Platform.isMobile);
 		const bg = s.homeBackground === "auto" ? autoScene() : s.homeBackground;
 		this.sceneName = bg;
@@ -138,7 +139,8 @@ export class HomeView extends ItemView {
 	private renderDashboard(page: HTMLElement, ctx: CardContext): void {
 		const s = this.plugin.settings;
 		const top = page.createDiv("hlh-dash-top");
-		const brand = top.createDiv("hlh-brand");
+		const heading = top.createDiv("hlh-brand-wrap");
+		const brand = heading.createDiv("hlh-brand");
 		brand.createSpan("hlh-brand-logo").appendChild(svgEl(OBSIDIAN_LOGO));
 		brand.createSpan({ cls: "hlh-brand-name", text: s.homeTitle || "Obsidian" });
 		const bar = top.createDiv("hlh-dash-bar");
@@ -157,14 +159,12 @@ export class HomeView extends ItemView {
 
 		const focus = this.plugin.isOn("focus");
 		const grid = page.createDiv("hlh-dash-grid" + (focus ? " has-focus" : ""));
-		// Fixed grid areas so rows line up: clock|vault on top, calendar|recent below, stats down the right.
+		// Fixed grid areas so rows line up: wide stats and recent notes on the left, timer and vault on the right.
 		const area = (name: string) => grid.createDiv("hlh-area hlh-area-" + name);
-		clockCard(area("clock"), ctx);
-		calendarCard(area("cal"), ctx);
-		vaultCard(area("vault"), ctx);
-		if (s.showRecent) recentCard(area("recent"), ctx);
 		statsCard(area("stats"), ctx);
 		if (focus) focusCard(area("focus"), ctx);
+		if (s.showRecent) recentCard(area("recent"), ctx);
+		vaultCard(area("vault"), ctx);
 	}
 
 	private renderModern(page: HTMLElement, ctx: CardContext): void {

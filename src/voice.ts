@@ -597,7 +597,7 @@ async function transcribe(s: HomeLLMSettings, who: Transcriber, blob: Blob, name
 
 /** The live-transcript function for the current settings, or null if there's no service to use. */
 export function liveTranscriber(s: HomeLLMSettings): LiveTranscriber | null {
-	if (!s.aiEnabled || !s.voiceLive) return null;
+	if (!s.aiEnabled || !s.voiceLive || s.lowPower) return null;
 	const who = pickTranscriber(s);
 	if (!who) return null;
 	const chosen = s.voiceModel.trim();

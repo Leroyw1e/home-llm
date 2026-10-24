@@ -1,9 +1,11 @@
-import { App, Editor, MarkdownRenderChild, MarkdownView, Menu, Notice, Platform, Plugin, SuggestModal, TFile, WorkspaceLeaf, debounce, normalizePath, setIcon } from "obsidian";
+import { App, Editor, Events, MarkdownRenderChild, MarkdownView, Menu, Notice, Platform, Plugin, SuggestModal, TFile, WorkspaceLeaf, debounce, normalizePath, setIcon } from "obsidian";
 import { CHAT_VIEW_TYPE, ChatView, StoredChat } from "./chat-view";
 import { DEFAULT_DAILY, DailyNoteConfig, loadDailyConfig } from "./daily";
-import { FOCUS_LABELS, FocusMode, FocusTimer, formatClock } from "./focus";
+import { CanvasInk, isCanvasView } from "./draw";
+import { FOCUS_LABELS, FocusMode, FocusTimer } from "./focus";
 import { HOME_VIEW_TYPE, HomeView } from "./home-view";
 import { MenuBarTimer, keepTimerAwake } from "./menubar";
+import { setLocalApp } from "./local";
 import { ensureMemoryNote, memoryPath } from "./memory";
 import { proofread } from "./proofread";
 import { ChatLocation, DEFAULT_SETTINGS, FEATURES, Feature, HomeLLMSettingTab, HomeLLMSettings } from "./settings";
@@ -49,7 +51,6 @@ class WidgetSuggest extends SuggestModal<WidgetEntry> {
 }
 
 /** Most chats kept in history; older ones drop off. */
-const MAX_CHATS = 300;
 
 /**
  * Obsidian has no public API to open the settings window, so this uses the app's internal one when present.
@@ -77,11 +78,13 @@ export default class HomeLLMPlugin extends Plugin {
 	focus!: FocusTimer;
 	private menuBar: MenuBarTimer | null = null;
 	reader = new Reader(this);
+	ink = new CanvasInk(this);
 	private recording: VoiceRecorder | null = null;
 	private startingRecording = false;
 	private saveChatsSoon = debounce(() => void this.saveChats(), 500, true);
 
 	async onload(): Promise<void> {
+		setLocalApp(this.app);
 		await this.loadSettings();
 		await this.loadChats();
 		this.stats = new VaultStats(
@@ -101,6 +104,7 @@ export default class HomeLLMPlugin extends Plugin {
 				},
 			}
 		);
+		this.stats.lazy = () => this.settings.lowPower;
 		this.registerEvent(this.app.vault.on("modify", (f) => void this.stats.onModify(f)));
 		this.registerEvent(this.app.vault.on("create", (f) => void this.stats.onModify(f)));
 		this.registerEvent(this.app.vault.on("delete", (f) => this.stats.onDelete(f)));
@@ -123,6 +127,23 @@ export default class HomeLLMPlugin extends Plugin {
 				return;
 			}
 			widget.render(host, { app: this.app, plugin: this, component: child, open: (f) => void this.app.workspace.getLeaf(false).openFile(f) });
+		});
+		// Home screen animations pause whenever Obsidian isn't the app in front.
+		const showFocused = () => activeDocument.body.toggleClass("hl-window-blurred", !activeDocument.hasFocus());
+		this.registerDomEvent(activeWindow, "blur", showFocused);
+		this.registerDomEvent(activeWindow, "focus", showFocused);
+		this.register(() => activeDocument.body.removeClass("hl-window-blurred"));
+		showFocused();
+		this.addCommand({
+			id: "toggle-low-power",
+			name: "Turn low power mode on or off",
+			icon: "battery-low",
+			callback: async () => {
+				this.settings.lowPower = !this.settings.lowPower;
+				await this.saveSettings();
+				this.applyPerformance();
+				new Notice(`Low power mode ${this.settings.lowPower ? "on" : "off"}`);
+			},
 		});
 		this.addCommand({ id: "open-memory", name: "Open AI memory note", icon: "brain", checkCallback: this.when("memory", () => void this.openMemory()) });
 		this.addCommand({
@@ -237,6 +258,41 @@ export default class HomeLLMPlugin extends Plugin {
 			})
 		);
 		this.register(() => this.reader.stop());
+
+		// Canvas drawing: buttons and the pencil listener are added to each canvas as it opens.
+		this.registerEvent(this.app.workspace.on("layout-change", () => this.ink.wireCanvases()));
+		this.app.workspace.onLayoutReady(() => this.ink.wireCanvases());
+		this.registerEvent(
+			// Canvas's own menu event isn't in Obsidian's published types.
+			(this.app.workspace as Events).on("canvas:node-menu", (...args: unknown[]) => {
+				const [menu, node] = args as [Menu, Parameters<CanvasInk["nodeMenu"]>[1]];
+				this.ink.nodeMenu(menu, node);
+			})
+		);
+		this.registerDomEvent(activeWindow, "keydown", (e) => this.ink.onKey(e) && e.stopPropagation(), { capture: true });
+		this.register(() => this.ink.unload());
+		this.addCommand({
+			id: "canvas-draw",
+			name: "Draw on this canvas",
+			icon: "pen-tool",
+			checkCallback: (checking) => {
+				const view = this.app.workspace.getMostRecentLeaf()?.view;
+				if (!this.isOn("draw") || !isCanvasView(view)) return false;
+				if (!checking) this.ink.start(view);
+				return true;
+			},
+		});
+		this.addCommand({
+			id: "canvas-sticky",
+			name: "Add sticky note to this canvas",
+			icon: "sticky-note",
+			checkCallback: (checking) => {
+				const view = this.app.workspace.getMostRecentLeaf()?.view;
+				if (!this.isOn("draw") || !isCanvasView(view)) return false;
+				if (!checking) this.ink.addSticky(view);
+				return true;
+			},
+		});
 		const study = (kind: StudyKind) => (checking: boolean) => {
 			const file = this.app.workspace.getActiveFile();
 			if (!this.isOn("study") || !file || file.extension !== "md") return false;
@@ -361,6 +417,8 @@ export default class HomeLLMPlugin extends Plugin {
 		this.focusRibbon?.toggleClass("hl-hidden", !this.isOn("focus"));
 		this.showFocus();
 		this.menuBar?.show(this.isOn("focus") && this.settings.focusMenuBar);
+		this.ink.showButtons();
+		this.addAiTabButtons();
 		if (!this.isOn("home")) this.app.workspace.detachLeavesOfType(HOME_VIEW_TYPE);
 		if (!this.isOn("chat")) this.app.workspace.detachLeavesOfType(CHAT_VIEW_TYPE);
 		this.refreshHomeViews();
@@ -387,6 +445,9 @@ export default class HomeLLMPlugin extends Plugin {
 		});
 		this.createFocusTab();
 		this.registerEvent(this.app.workspace.on("layout-change", () => this.placeFocusTab()));
+		this.registerEvent(this.app.workspace.on("layout-change", () => this.addAiTabButtons()));
+		this.app.workspace.onLayoutReady(() => this.addAiTabButtons());
+		this.register(() => activeDocument.querySelectorAll(".hl-ai-tab-btn").forEach((b) => b.remove()));
 		this.menuBar = new MenuBarTimer(this.focus, () => this.settings.focusColour || DEFAULT_SETTINGS.focusColour);
 		this.register(() => {
 			this.menuBar?.destroy();
@@ -399,13 +460,15 @@ export default class HomeLLMPlugin extends Plugin {
 				this.menuBar?.update();
 				if (this.focus.running !== wasRunning) {
 					wasRunning = this.focus.running;
-					keepTimerAwake(wasRunning);
+					// Low power mode lets Obsidian rest in the background; the chime may then be up to a minute late.
+					keepTimerAwake(wasRunning && !this.settings.lowPower);
 				}
 			})
 		);
 		this.registerInterval(window.setInterval(() => this.focus.tick(), 1000));
 		this.applyFocusColour();
 		this.addCommand({ id: "focus-start-pause", name: "Start or pause focus timer", icon: "timer", checkCallback: this.when("focus", () => this.focus.toggle()) });
+		this.addCommand({ id: "focus-stop", name: "Stop focus timer", icon: "square", checkCallback: this.when("focus", () => this.focus.stop()) });
 		this.addCommand({ id: "focus-reset", name: "Reset focus timer", icon: "rotate-ccw", checkCallback: this.when("focus", () => this.focus.reset()) });
 		this.addCommand({ id: "focus-skip", name: "Skip to next focus timer session", icon: "skip-forward", checkCallback: this.when("focus", () => this.focus.skip()) });
 	}
@@ -414,6 +477,7 @@ export default class HomeLLMPlugin extends Plugin {
 		const t = this.focus;
 		const menu = new Menu();
 		menu.addItem((it) => it.setTitle(t.running ? "Pause" : "Start").setIcon(t.running ? "pause" : "play").onClick(() => t.toggle()));
+		menu.addItem((it) => it.setTitle("Stop").setIcon("square").onClick(() => t.stop()));
 		menu.addItem((it) => it.setTitle("Reset").setIcon("rotate-ccw").onClick(() => t.reset()));
 		menu.addItem((it) => it.setTitle("Skip to next").setIcon("skip-forward").onClick(() => t.skip()));
 		menu.addSeparator();
@@ -439,7 +503,7 @@ export default class HomeLLMPlugin extends Plugin {
 		const on = this.isOn("focus");
 		const t = this.focus;
 		const showing = on && t.active;
-		const left = formatClock(t.left);
+		const left = t.clock();
 		const what = t.state.mode === "focus" ? "Focus" : "Break";
 		if (this.focusRibbon) {
 			this.focusRibbon.toggleClass("is-running", on && t.running);
@@ -473,6 +537,23 @@ export default class HomeLLMPlugin extends Plugin {
 		this.focusTab = el;
 	}
 
+	/** A sparkle button beside each tab bar's "+" that opens a new tab with just the AI chat. */
+	private addAiTabButtons(): void {
+		const on = this.isOn("chat");
+		for (const header of Array.from(this.app.workspace.containerEl.querySelectorAll<HTMLElement>(".mod-root .workspace-tab-header-container"))) {
+			let btn = header.querySelector<HTMLElement>(".hl-ai-tab-btn");
+			if (!btn) {
+				const newTab = header.querySelector(".workspace-tab-header-new-tab");
+				if (!newTab) continue;
+				btn = createDiv({ cls: "workspace-tab-header-new-tab hl-ai-tab-btn clickable-icon", attr: { "aria-label": "New AI tab" } });
+				setIcon(btn, "sparkles");
+				btn.addEventListener("click", () => void this.openChat("tab"));
+				newTab.after(btn);
+			}
+			btn.toggleClass("hl-hidden", !on);
+		}
+	}
+
 	/** Moves the timer into the top-right tab group's header, just left of the tab list button. */
 	private placeFocusTab(): void {
 		const el = this.focusTab;
@@ -483,6 +564,27 @@ export default class HomeLLMPlugin extends Plugin {
 		const target = headers.sort((a, b) => box(a).top - box(b).top || box(b).right - box(a).right)[0];
 		if (el.parentElement === target) return;
 		target.insertBefore(el, target.querySelector(".workspace-tab-header-tab-list"));
+	}
+
+	/** Applies low power mode and the animation setting straight away. */
+	applyPerformance(): void {
+		this.refreshHomeViews();
+		this.focus.redraw();
+		keepTimerAwake(this.focus.running && !this.settings.lowPower);
+	}
+
+	/** Drops chats beyond the number to keep. */
+	trimChats(): void {
+		if (this.chats.length <= this.settings.chatsToKeep) return;
+		this.chats = this.chats.slice(0, this.settings.chatsToKeep);
+		this.saveChatsSoon();
+	}
+
+	/** Opens another page of Obsidian's settings, such as "community-plugins". */
+	openSettingsTab(id: string): void {
+		const setting = (this.app as unknown as { setting?: { open?: () => void; openTabById?: (id: string) => void } }).setting;
+		setting?.open?.();
+		setting?.openTabById?.(id);
 	}
 
 	/** Starts a recording, or stops the current one and turns it into a note. */
@@ -594,7 +696,7 @@ export default class HomeLLMPlugin extends Plugin {
 	}
 
 	upsertChat(chat: StoredChat): void {
-		this.chats = [chat, ...this.chats.filter((c) => c.id !== chat.id)].slice(0, MAX_CHATS);
+		this.chats = [chat, ...this.chats.filter((c) => c.id !== chat.id)].slice(0, this.settings.chatsToKeep);
 		this.saveChatsSoon();
 	}
 

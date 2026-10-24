@@ -112,6 +112,12 @@ export class FocusTimer {
 		this.changed();
 	}
 
+	/** Ends the current session and goes back to the start of a focus session, without counting it. */
+	stop(): void {
+		this.state.mode = "focus";
+		this.reset();
+	}
+
 	setMode(mode: FocusMode): void {
 		this.state.mode = mode;
 		this.reset();
@@ -127,11 +133,27 @@ export class FocusTimer {
 		return this.state.done > 0 && this.state.done % this.plugin.settings.focusLongEvery === 0 ? "long" : "short";
 	}
 
+	/** In low power mode the timer shows whole minutes and only updates when the minute changes. */
+	get coarse(): boolean {
+		return this.plugin.settings.lowPower;
+	}
+
+	/** The time left as shown everywhere: "24:13", or "25 min" in low power mode. */
+	clock(): string {
+		return this.coarse ? `${Math.ceil(this.left / 60_000)} min` : formatClock(this.left);
+	}
+
+	private shownMinute = -1;
+
 	/** Called every second by the plugin. */
 	tick(): void {
 		if (!this.running) return;
 		if (this.left > 0) {
-			this.changed(false);
+			const minute = Math.ceil(this.left / 60_000);
+			if (!this.coarse || minute !== this.shownMinute) {
+				this.shownMinute = minute;
+				this.changed(false);
+			}
 			return;
 		}
 		this.newDay();
@@ -146,6 +168,12 @@ export class FocusTimer {
 		new Notice(message, 8000);
 		notifyOutsideApp("Focus timer", message);
 		if (this.plugin.settings.focusAutoStart) this.start();
+	}
+
+	/** Redraws everything showing the timer (after a display setting changes). */
+	redraw(): void {
+		this.shownMinute = -1;
+		this.changed(false);
 	}
 
 	/** Re-reads lengths after the settings change, if the timer hasn't started. */

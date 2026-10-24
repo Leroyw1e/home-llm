@@ -5,9 +5,11 @@ import type { FocusState } from "./focus";
 import type { WordBaseline } from "./stats";
 import type { WritingLog } from "./writing";
 import { Reader, voices } from "./speak";
+import { currentUsage, enabledPluginSizes } from "./performance";
+import { localAI } from "./local";
 import { DEFAULT_TRANSCRIBE_MODEL, TRANSCRIBER_LABELS, type Transcriber } from "./voice";
 
-export type ProviderId = "anthropic" | "openai" | "openrouter" | "custom";
+export type ProviderId = "anthropic" | "openai" | "openrouter" | "custom" | "local";
 export type ChatLocation = "left" | "right" | "tab";
 /** How hard the model thinks before answering; "default" leaves it to the model. */
 export type Effort = "default" | "low" | "medium" | "high" | "xhigh" | "max";
@@ -21,7 +23,7 @@ export const EFFORT_LABELS: Record<Effort, string> = {
 	max: "Max",
 };
 
-export type Feature = "home" | "ai" | "chat" | "memory" | "spell" | "profile" | "study" | "voice" | "read" | "focus" | "widgets" | "graph";
+export type Feature = "home" | "ai" | "chat" | "memory" | "spell" | "profile" | "study" | "voice" | "read" | "focus" | "draw" | "widgets" | "graph";
 
 /** Every main feature's on/off switch, in the order shown under Features in settings. */
 export const FEATURES: { id: Feature; key: keyof HomeLLMSettings & `${string}${"Enabled" | "Graph"}`; name: string; desc: string; needsAI?: boolean }[] = [
@@ -35,11 +37,18 @@ export const FEATURES: { id: Feature; key: keyof HomeLLMSettings & `${string}${"
 	{ id: "voice", key: "voiceEnabled", name: "Voice notes", desc: "A microphone button that records into a new note. With AI on, you also get a transcript and summary." },
 	{ id: "read", key: "readEnabled", name: "Read aloud", desc: "Hear a note read to you, using your device's own voices (works offline, free)." },
 	{ id: "focus", key: "focusEnabled", name: "Focus timer", desc: "A Pomodoro timer on the home screen, in the left ribbon, in the tab bar while it runs, and in the menu bar." },
+	{ id: "draw", key: "drawEnabled", name: "Canvas drawing", desc: "Draw on any canvas with Apple Pencil, a mouse or your finger, add shapes and arrows, and add sticky notes, like Freeform." },
 	{ id: "widgets", key: "widgetsEnabled", name: "Note widgets", desc: "Live clocks, calendars, word counts and stats inside notes." },
 	{ id: "graph", key: "purpleGraph", name: "Purple graph links", desc: "Draw the lines between linked notes in purple. Reopen graph view to see the change." },
 ];
 
 export interface HomeLLMSettings {
+	/** Low power mode: fewer updates and no animations, to use less CPU and battery. */
+	lowPower: boolean;
+	/** Moving parts in the illustrated home screen backgrounds. */
+	animatedBackgrounds: boolean;
+	/** How many past chats are kept (each is held in memory). */
+	chatsToKeep: number;
 	/** Feature switches: the home screen (and its ribbon button), and everything AI. */
 	homeEnabled: boolean;
 	aiEnabled: boolean;
@@ -51,6 +60,15 @@ export interface HomeLLMSettings {
 	writingLogEnabled: boolean;
 	writingLog: WritingLog | null;
 	writingProfileNote: string;
+	/** Canvas drawing: the last tool, colour ("ink" = black or white to suit the theme) and on-screen width. */
+	drawEnabled: boolean;
+	drawTool: string;
+	drawColour: string;
+	drawSize: number;
+	/** Fingers draw instead of scrolling (for touch screens without a pencil). */
+	drawWithFinger: boolean;
+	/** Touching a canvas with Apple Pencil starts drawing straight away. */
+	drawWithPencil: boolean;
 	/** Read aloud: the voice's name ("" picks the best one for your spelling) and speed. */
 	readEnabled: boolean;
 	readVoice: string;
@@ -124,6 +142,9 @@ export interface HomeLLMSettings {
 }
 
 export const DEFAULT_SETTINGS: HomeLLMSettings = {
+	lowPower: false,
+	animatedBackgrounds: true,
+	chatsToKeep: 300,
 	homeEnabled: true,
 	aiEnabled: true,
 	chatEnabled: true,
@@ -132,6 +153,12 @@ export const DEFAULT_SETTINGS: HomeLLMSettings = {
 	writingLogEnabled: true,
 	writingLog: null,
 	writingProfileNote: "Writing profile.md",
+	drawEnabled: true,
+	drawTool: "pen",
+	drawColour: "ink",
+	drawSize: 6,
+	drawWithFinger: false,
+	drawWithPencil: true,
 	readEnabled: true,
 	readVoice: "",
 	readRate: 1,
@@ -173,7 +200,7 @@ export const DEFAULT_SETTINGS: HomeLLMSettings = {
 	replaceNewTab: true,
 	showSearch: true,
 	showRecent: true,
-	homeStyle: "modern",
+	homeStyle: "dashboard",
 	homeBackground: "glow",
 	homeTitle: "Obsidian",
 	recentCount: 10,
@@ -194,6 +221,7 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = {
 	openai: "OpenAI",
 	openrouter: "OpenRouter",
 	custom: "Custom / Ollama / LM Studio",
+	local: "On this device",
 };
 
 export const MODEL_SUGGESTIONS: Record<ProviderId, string[]> = {
@@ -201,6 +229,7 @@ export const MODEL_SUGGESTIONS: Record<ProviderId, string[]> = {
 	openai: ["gpt-4o", "gpt-4o-mini"],
 	openrouter: ["anthropic/claude-sonnet-5.5", "openai/gpt-4o"],
 	custom: [],
+	local: [],
 };
 
 /** Settings whose value is any string (not a fixed set of choices). */
@@ -209,10 +238,15 @@ type BoolKey = { [K in keyof HomeLLMSettings]: HomeLLMSettings[K] extends boolea
 
 export class HomeLLMSettingTab extends PluginSettingTab {
 	plugin: HomeLLMPlugin;
+	private usageTimer = 0;
 
 	constructor(app: App, plugin: HomeLLMPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
+	}
+
+	hide(): void {
+		window.clearInterval(this.usageTimer);
 	}
 
 	display(): void {
@@ -278,6 +312,66 @@ export class HomeLLMSettingTab extends PluginSettingTab {
 		}
 		showAIState();
 
+		heading("Performance");
+		const usage = currentUsage();
+		if (usage) {
+			const live = new Setting(containerEl).setName("Obsidian right now").setDesc("Measuring…");
+			live.settingEl.addClass("hl-usage");
+			const show = () => {
+				const u = currentUsage();
+				if (u) live.setDesc(`${Math.round(u.cpu)}% CPU · ${u.memoryMB.toLocaleString()} MB memory · ${u.processes} processes`);
+			};
+			window.clearInterval(this.usageTimer);
+			this.usageTimer = window.setInterval(show, 2000);
+			window.setTimeout(show, 300);
+		}
+		new Setting(containerEl)
+			.setName("Low power mode")
+			.setDesc("Uses less CPU and battery: stops background animations, counts words every 30 seconds instead of as you type, updates the focus timer once a minute, lets Obsidian rest in the background, and turns off the live transcript.")
+			.addToggle((tg) =>
+				tg.setValue(s.lowPower).onChange(async (v) => {
+					s.lowPower = v;
+					await save();
+					this.plugin.applyPerformance();
+				})
+			);
+		new Setting(containerEl)
+			.setName("Animated backgrounds")
+			.setDesc("Twinkling stars, rain, waves and the aurora on the home screen. They always pause while Obsidian isn't the app you're using.")
+			.addToggle((tg) =>
+				tg.setValue(s.animatedBackgrounds).onChange(async (v) => {
+					s.animatedBackgrounds = v;
+					await save();
+					this.plugin.applyPerformance();
+				})
+			);
+		new Setting(containerEl)
+			.setName("Chats to keep")
+			.setDesc("Older chats are deleted. Fewer chats use less memory.")
+			.addDropdown((d) => {
+				for (const n of [20, 50, 100, 300]) d.addOption(String(n), String(n));
+				d.setValue(String(s.chatsToKeep)).onChange(async (v) => {
+					s.chatsToKeep = Number(v);
+					await save();
+					this.plugin.trimChats();
+				});
+			});
+		const pluginRows = containerEl.createDiv();
+		void enabledPluginSizes(this.app).then((sizes) => {
+			if (!sizes.length) return;
+			new Setting(pluginRows)
+				.setName("Biggest plugins")
+				.setDesc("Every turned-on plugin loads when Obsidian starts. Big ones take the most memory, so turn off any you don't use often.")
+				.addButton((b) => b.setButtonText("Manage plugins").onClick(() => this.plugin.openSettingsTab("community-plugins")));
+			for (const p of sizes.slice(0, 6)) {
+				const big = p.sizeMB >= 5;
+				new Setting(pluginRows)
+					.setName(p.name)
+					.setDesc(`${p.sizeMB >= 1 ? p.sizeMB.toFixed(1) + " MB" : Math.max(1, Math.round(p.sizeMB * 1024)) + " KB"} of code${big ? ". Large: this is likely the biggest user of memory." : ""}`)
+					.settingEl.toggleClass("hl-plugin-big", big);
+			}
+		});
+
 		heading("AI provider");
 		new Setting(containerEl)
 			.setName("Default provider")
@@ -302,6 +396,17 @@ export class HomeLLMSettingTab extends PluginSettingTab {
 		textField("Base URL", "customBaseUrl", "For example http://localhost:11434/v1 for Ollama. On mobile it must be reachable from your phone.");
 		keyField("API key (optional)", "customKey");
 		textField("Model", "customModel");
+
+		heading("On this device");
+		const local = localAI();
+		new Setting(containerEl)
+			.setName(local ? `Using ${local.modelName()}` : "Home + AI Local add-on")
+			.setDesc(
+				local
+					? "Runs a small AI model on this device with no internet and no API key. Choose the model and download it in the add-on's settings, then pick On this device as the provider."
+					: "Install the Home + AI Local add-on from Community plugins to run a small AI model on this device (works best on recent iPads and Macs), with no internet or API key. It's separate so this plugin stays light."
+			)
+			.addButton((b) => b.setButtonText(local ? "Add-on settings" : "Find add-on").onClick(() => this.plugin.openSettingsTab(local ? "home-ai-local" : "community-plugins")));
 
 		heading("Replies");
 		new Setting(containerEl)
@@ -384,6 +489,13 @@ export class HomeLLMSettingTab extends PluginSettingTab {
 		toggle("Live transcript", "voiceLive", "Show what you're saying under the recording bar as you talk. Sends short clips while you speak, so it costs a little extra.");
 		toggle("Timestamps", "voiceTimestamps", "Start each paragraph of the transcript with a time. Click it to hear that part of the recording.");
 		textField("Voice notes folder", "voiceFolder", "Recordings go wherever Obsidian puts attachments.");
+
+		heading("Canvas drawing");
+		new Setting(containerEl)
+			.setName("How to draw")
+			.setDesc("In a canvas, press the pen button in the toolbar at the bottom. Draw, then press done and your drawing becomes a card you can move, resize and connect. Right-click a drawing and choose edit drawing to change it.");
+		toggle("Draw as soon as the pencil touches", "drawWithPencil", "On a tablet, touching a canvas with a stylus starts drawing, while fingers keep scrolling and zooming.");
+		toggle("Draw with finger", "drawWithFinger", "Fingers draw instead of scrolling while drawing. Useful without a stylus.");
 
 		heading("Read aloud");
 		const voiceRow = new Setting(containerEl).setName("Voice").setDesc("Your device's built-in voices. For the most natural sound, download a premium voice in your system's spoken content settings.");

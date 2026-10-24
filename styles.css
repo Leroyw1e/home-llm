@@ -707,8 +707,8 @@
 	display: grid;
 	grid-template-columns: repeat(3, minmax(0, 1fr));
 	grid-template-areas:
-		"clock vault stats"
-		"cal recent stats";
+		"stats stats vault"
+		"recent recent vault";
 	gap: 16px;
 }
 .hlh-area {
@@ -721,7 +721,6 @@
 	flex: 1;
 }
 .hlh-area-clock { grid-area: clock; }
-.hlh-area-cal { grid-area: cal; }
 .hlh-area-vault { grid-area: vault; }
 .hlh-area-recent { grid-area: recent; }
 .hlh-area-stats { grid-area: stats; }
@@ -731,10 +730,8 @@
 }
 .hlh-dashboard .hlh-card-head,
 .hl-widget .hlh-card-head {
-	padding: 12px 16px;
-	margin-bottom: 6px;
-	border-bottom: 1px solid var(--hlh-card-border);
-	color: var(--text-normal);
+	padding: 16px 18px 6px;
+	color: var(--text-muted);
 }
 .hlh-dashboard .hlh-card-body,
 .hl-widget .hlh-card-body {
@@ -898,9 +895,8 @@
 	.hlh-dash-grid {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 		grid-template-areas:
-			"clock vault"
-			"cal recent"
-			"stats stats";
+			"stats stats"
+			"vault recent";
 	}
 }
 @media (max-width: 700px) {
@@ -924,7 +920,7 @@
 	}
 	.hlh-dash-grid {
 		grid-template-columns: minmax(0, 1fr);
-		grid-template-areas: "clock" "stats" "cal" "vault" "recent";
+		grid-template-areas: "stats" "vault" "recent";
 	}
 	.hlh-stats-row {
 		grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -1560,6 +1556,11 @@
 }
 
 /* ---------- Vault stats card ---------- */
+/* The stats card is purple throughout, whatever the theme's accent colour. */
+.hls-card {
+	--hls-purple: #8a5cf5;
+}
+
 .hls-card {
 	display: flex;
 	flex-direction: column;
@@ -1579,7 +1580,7 @@
 	line-height: 1.05;
 	letter-spacing: -0.03em;
 	font-variant-numeric: tabular-nums;
-	background: linear-gradient(120deg, var(--text-normal), color-mix(in srgb, var(--interactive-accent) 70%, var(--text-normal)));
+	background: linear-gradient(120deg, var(--text-normal), color-mix(in srgb, var(--hls-purple) 70%, var(--text-normal)));
 	-webkit-background-clip: text;
 	background-clip: text;
 	color: transparent;
@@ -1599,12 +1600,12 @@
 	font-size: var(--font-ui-smaller);
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
-	color: var(--color-green);
-	background: color-mix(in srgb, var(--color-green) 14%, transparent);
+	color: var(--hls-purple);
+	background: color-mix(in srgb, var(--hls-purple) 16%, transparent);
 }
 .hls-today.is-down {
-	color: var(--color-orange);
-	background: color-mix(in srgb, var(--color-orange) 14%, transparent);
+	color: color-mix(in srgb, var(--hls-purple) 70%, var(--text-muted));
+	background: color-mix(in srgb, var(--hls-purple) 10%, transparent);
 }
 .hls-grid {
 	display: grid;
@@ -1631,8 +1632,8 @@
 	width: 30px;
 	height: 30px;
 	border-radius: 9px;
-	color: var(--interactive-accent);
-	background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+	color: var(--hls-purple);
+	background: color-mix(in srgb, var(--hls-purple) 14%, transparent);
 }
 .hls-tile-icon svg {
 	width: 15px;
@@ -1673,7 +1674,7 @@
 .hls-bar-fill {
 	height: 100%;
 	border-radius: 999px;
-	background: linear-gradient(90deg, var(--interactive-accent), var(--color-green));
+	background: linear-gradient(90deg, color-mix(in srgb, var(--hls-purple) 60%, transparent), var(--hls-purple));
 }
 .hls-rows {
 	margin: 0 -8px;
@@ -2080,22 +2081,22 @@ body:not(.hl-graph-default-lines) .graph-view.color-line-highlight {
 
 .hlh-dash-grid.has-focus {
 	grid-template-areas:
-		"clock vault focus"
-		"cal recent stats";
+		"stats stats focus"
+		"recent recent vault";
 }
 
 @media (max-width: 1000px) {
 	.hlh-dash-grid.has-focus {
 		grid-template-areas:
-			"clock focus"
-			"cal vault"
-			"recent stats";
+			"stats stats"
+			"focus vault"
+			"recent recent";
 	}
 }
 
 @media (max-width: 700px) {
 	.hlh-dash-grid.has-focus {
-		grid-template-areas: "clock" "focus" "stats" "cal" "vault" "recent";
+		grid-template-areas: "stats" "focus" "vault" "recent";
 	}
 }
 
@@ -2647,12 +2648,12 @@ body:not(.hl-graph-default-lines) .graph-view.color-line-highlight {
 	margin: 10px 0 4px;
 	padding: 8px 12px;
 	border-radius: 12px;
-	background: color-mix(in srgb, var(--color-orange) 12%, transparent);
+	background: color-mix(in srgb, var(--hls-purple, #8a5cf5) 14%, transparent);
 }
 
 .hls-streak-icon {
 	display: flex;
-	color: var(--color-orange);
+	color: var(--hls-purple, #8a5cf5);
 }
 
 .hls-streak-icon svg {
@@ -2661,7 +2662,7 @@ body:not(.hl-graph-default-lines) .graph-view.color-line-highlight {
 }
 
 .hls-streak.is-done .hls-streak-icon svg {
-	fill: color-mix(in srgb, var(--color-orange) 45%, transparent);
+	fill: color-mix(in srgb, var(--hls-purple, #8a5cf5) 45%, transparent);
 }
 
 .hls-streak.is-zero {
@@ -2696,4 +2697,295 @@ body:not(.hl-graph-default-lines) .graph-view.color-line-highlight {
 	font-variant-numeric: tabular-nums;
 	color: var(--text-muted);
 	background: var(--background-modifier-hover);
+}
+
+/* ---------- Canvas drawing ---------- */
+
+.hl-ink-layer {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	z-index: 30;
+	overflow: visible;
+}
+
+.hl-ink-active .canvas-wrapper {
+	cursor: crosshair;
+	touch-action: none;
+}
+
+.hl-ink-active.hl-ink-erasing .canvas-wrapper {
+	cursor: cell;
+}
+
+/* The canvas's own card toolbar is replaced by the drawing palette while drawing. */
+.hl-ink-active .canvas-card-menu {
+	display: none;
+}
+
+.canvas-node.hl-ink-hidden {
+	visibility: hidden;
+}
+
+.canvas-card-menu-button.hl-ink-menu-btn.hl-hidden {
+	display: none;
+}
+
+.hl-ink-palette {
+	position: absolute;
+	left: 50%;
+	bottom: 16px;
+	transform: translateX(-50%);
+	z-index: 40;
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: center;
+	row-gap: 4px;
+	width: max-content;
+	max-width: calc(100% - 24px);
+	padding: 6px;
+	border-radius: 16px;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: var(--shadow-l);
+	animation: hl-rec-in 160ms ease-out;
+}
+
+.hl-ink-palette.is-mobile {
+	bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+}
+
+.hl-ink-group {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	padding: 0 4px;
+}
+
+.hl-ink-group:not(:first-child) {
+	border-left: 1px solid var(--background-modifier-border);
+}
+
+.hl-ink-btn.clickable-icon {
+	width: 34px;
+	height: 34px;
+	padding: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 10px;
+}
+
+.hl-ink-btn.clickable-icon.is-active {
+	color: var(--text-on-accent);
+	background: var(--interactive-accent);
+}
+
+.hl-ink-swatch {
+	width: 26px;
+	height: 26px;
+	padding: 0;
+	border-radius: 50%;
+	background: var(--hl-swatch);
+	border: 2px solid var(--background-primary);
+	box-shadow: 0 0 0 1px var(--background-modifier-border);
+}
+
+.hl-ink-swatch.is-active {
+	box-shadow: 0 0 0 2px var(--interactive-accent);
+}
+
+.hl-ink-size {
+	width: 30px;
+	height: 30px;
+	padding: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 10px;
+	background: transparent;
+	box-shadow: none;
+}
+
+.hl-ink-size.is-active {
+	background: var(--background-modifier-hover);
+}
+
+.hl-ink-size-dot {
+	width: var(--hl-dot);
+	height: var(--hl-dot);
+	border-radius: 50%;
+	background: var(--text-normal);
+}
+
+.hl-ink-done {
+	height: 34px;
+	padding: 0 16px;
+	border-radius: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.hl-ink-palette {
+		animation: none;
+	}
+}
+
+/* ---------- Performance ---------- */
+
+/* Background animations stop in low power mode, when turned off, and while Obsidian isn't the app in front. */
+.home-llm-home.hlh-still .hlh-sky,
+.home-llm-home.hlh-still .hlh-sky *,
+.hl-window-blurred .home-llm-home .hlh-sky,
+.hl-window-blurred .home-llm-home .hlh-sky * {
+	animation-play-state: paused;
+}
+
+.home-llm-home.hlh-still .hlh-rain-0,
+.home-llm-home.hlh-still .hlh-rain-1 {
+	display: none;
+}
+
+.hl-usage .setting-item-description {
+	font-variant-numeric: tabular-nums;
+}
+
+.hl-plugin-big .setting-item-name {
+	color: var(--text-warning);
+}
+
+/* ---------- Cleaner dashboard ---------- */
+
+/* Softer card edges, so the page reads as a few calm panels rather than a grid of boxes. */
+.hlh-dashboard {
+	--hlh-card-border: color-mix(in srgb, var(--text-normal) 7%, transparent);
+}
+
+.hlh-dashboard .hlh-card {
+	padding-bottom: 12px;
+}
+
+/* Vault: a 3 × 2 grid of numbers that fills its card instead of a thin strip. */
+.hlh-area-vault > .hlh-card {
+	display: flex;
+	flex-direction: column;
+}
+
+.hlh-area-vault .hlh-stats-row {
+	flex: 1;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	align-content: center;
+	row-gap: 22px;
+	padding: 8px 12px 12px;
+}
+
+.hlh-area-vault .hlh-stat-num {
+	font-size: 1.9em;
+}
+
+.hlh-area-vault .hlh-stat-label {
+	font-size: var(--font-ui-smaller);
+}
+
+/* Focus timer: a slightly smaller dial so the top row stays compact. */
+.hlh-area-focus .hlh-focus-dial {
+	width: 132px;
+	height: 132px;
+}
+
+.hlh-area-focus .hlh-focus-time {
+	font-size: 1.85em;
+}
+
+.hlh-area-focus .hlh-focus-body {
+	gap: 10px;
+}
+
+/* Vault stats, wide: word count beside the streak, and four tiles to a row. */
+.hls-top {
+	display: flex;
+	flex-direction: column;
+}
+
+.hlh-area-stats .hls-top {
+	flex-direction: row;
+	align-items: center;
+	gap: 20px;
+}
+
+.hlh-area-stats .hls-top .hls-hero {
+	flex: none;
+}
+
+.hlh-area-stats .hls-top .hls-streak {
+	flex: 1;
+	margin: 0;
+}
+
+.hlh-area-stats .hls-grid {
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 700px) {
+	.hlh-area-stats .hls-top {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 0;
+	}
+
+	.hlh-area-stats .hls-top .hls-streak {
+		margin: 10px 0 4px;
+	}
+
+	.hlh-area-stats .hls-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.hlh-area-vault .hlh-stats-row {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+
+/* ---------- AI chat as a full page (in a tab) ---------- */
+
+.home-llm-chat.is-page .hlc-list > *,
+.home-llm-chat.is-page .hlc-composer > * {
+	width: 100%;
+	max-width: 780px;
+	margin-left: auto;
+	margin-right: auto;
+}
+
+.home-llm-chat.is-page .hlc-empty {
+	padding-top: 12vh;
+}
+
+.home-llm-chat.is-page .hlc-empty-icon svg {
+	width: 40px;
+	height: 40px;
+}
+
+.home-llm-chat.is-page .hlc-empty-title {
+	font-size: 2em;
+	font-weight: 700;
+}
+
+.home-llm-chat.is-page .hlc-suggestions {
+	max-width: 640px;
+}
+
+.home-llm-chat.is-page .hlc-composer {
+	padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+
+.workspace-tab-header-new-tab.hl-ai-tab-btn.hl-hidden {
+	display: none;
+}
+
+/* Focus timer stop button. */
+.hlh-focus-btn.is-stop:disabled {
+	opacity: 0.35;
+	cursor: default;
 }

@@ -1,5 +1,5 @@
 import { Platform } from "obsidian";
-import { FOCUS_LABELS, FocusMode, FocusTimer, formatClock } from "./focus";
+import { FOCUS_LABELS, FocusMode, FocusTimer } from "./focus";
 
 /** The parts of Electron's remote module used here (Obsidian's desktop app provides it). */
 interface NativeImage {
@@ -62,6 +62,7 @@ export class MenuBarTimer {
 	private drawnStep = -1;
 	private drawnColour = "";
 	private shownTitle = "";
+	private shownTip = "";
 
 	constructor(
 		private timer: FocusTimer,
@@ -98,7 +99,7 @@ export class MenuBarTimer {
 		const tray = this.tray;
 		if (!r || !tray || tray.isDestroyed()) return;
 		const t = this.timer;
-		const title = t.active ? ` ${formatClock(t.left)}` : "";
+		const title = t.active ? ` ${t.clock()}` : "";
 		if (title !== this.shownTitle) {
 			this.shownTitle = title;
 			tray.setTitle(title, { fontType: "monospacedDigit" });
@@ -106,7 +107,11 @@ export class MenuBarTimer {
 		// Redraw the ring in 2% steps so it isn't redrawn every second.
 		const step = Math.round(t.progress * 50);
 		if (step !== this.drawnStep || this.colour() !== this.drawnColour) tray.setImage(this.icon(r));
-		tray.setToolTip(t.active ? `${FOCUS_LABELS[t.state.mode]}: ${formatClock(t.left)} left${t.running ? "" : " (paused)"}` : "Focus timer");
+		const tip = t.active ? `${FOCUS_LABELS[t.state.mode]}: ${t.clock()} left${t.running ? "" : " (paused)"}` : "Focus timer";
+		if (tip !== this.shownTip) {
+			this.shownTip = tip;
+			tray.setToolTip(tip);
+		}
 		const key = `${t.running}|${t.active}|${t.state.mode}`;
 		if (key !== this.menuKey) {
 			this.menuKey = key;
@@ -118,6 +123,7 @@ export class MenuBarTimer {
 		const t = this.timer;
 		const items: MenuItem[] = [
 			{ label: t.running ? "Pause" : t.active ? "Resume" : "Start", click: () => t.toggle() },
+			{ label: "Stop", enabled: t.active || t.state.mode !== "focus", click: () => t.stop() },
 			{ label: "Reset", enabled: t.active, click: () => t.reset() },
 			{ label: "Skip to next", click: () => t.skip() },
 			{ type: "separator" },

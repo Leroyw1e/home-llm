@@ -1,6 +1,6 @@
 import { App, TFile, normalizePath } from "obsidian";
 import { readMemory, saveMemory, withFact, withoutFact } from "./memory";
-import { ChatMessage, anthropicCall, openaiCall } from "./providers";
+import { ChatMessage, anthropicCall, openaiCall, sendChat } from "./providers";
 import type { HomeLLMSettings, ProviderId } from "./settings";
 
 /** A step the AI took, shown as a small label above its reply. */
@@ -375,6 +375,11 @@ export async function runAgent(
 	const memory = opts.memory ? await readMemory(app, opts.memory.path) : "";
 	const fullSystem = system + systemAddendum(opts, memory);
 	if (provider === "anthropic") return anthropicLoop(s, model, history, fullSystem, tools);
+	if (provider === "local") {
+		// On-device models are too small to use note tools reliably, so they answer from the chat (and memory) alone.
+		hooks.onActivity({ icon: "cpu", text: "Answered on this device" });
+		return sendChat(s, provider, model, history, opts.memory && memory ? `${system}\n\nWhat you know about the user:\n${memory}` : system, (text) => hooks.onActivity({ icon: "download", text }));
+	}
 	try {
 		return await openaiLoop(s, provider, model, history, fullSystem, tools);
 	} catch (e) {

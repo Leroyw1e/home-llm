@@ -128,6 +128,16 @@ export class VaultStats {
 	private listeners = new Set<() => void>();
 	ready = false;
 	private notifySoon = debounce(() => this.listeners.forEach((fn) => fn()), 1000, true);
+	/** When true (low power mode), edited notes are recounted together every 30 seconds instead of on each save. */
+	lazy: () => boolean = () => false;
+	private pending = new Set<TFile>();
+	private flushSoon = debounce(() => void this.flush(), 30_000, false);
+
+	private async flush(): Promise<void> {
+		const files = [...this.pending];
+		this.pending.clear();
+		for (const f of files) await this.recount(f);
+	}
 
 	constructor(
 		private app: App,
@@ -167,6 +177,16 @@ export class VaultStats {
 
 	async onModify(file: TAbstractFile): Promise<void> {
 		if (!this.ready || !(file instanceof TFile) || file.extension !== "md") return;
+		if (this.lazy()) {
+			this.pending.add(file);
+			this.flushSoon();
+			return;
+		}
+		await this.recount(file);
+	}
+
+	private async recount(file: TFile): Promise<void> {
+		if (!this.app.vault.getAbstractFileByPath(file.path)) return;
 		const before = this.counts.get(file.path)?.words ?? 0;
 		const now = countText(await this.app.vault.cachedRead(file));
 		this.counts.set(file.path, now);

@@ -1,4 +1,5 @@
 import { requestUrl } from "obsidian";
+import { LOCAL_MODEL, NO_LOCAL_ADDON, localAI } from "./local";
 import type { Effort, HomeLLMSettings, ProviderId } from "./settings";
 
 export interface ChatMessage {
@@ -16,6 +17,8 @@ export function modelFor(s: HomeLLMSettings, p: ProviderId): string {
 			return s.openrouterModel;
 		case "custom":
 			return s.customModel;
+		case "local":
+			return LOCAL_MODEL;
 	}
 }
 
@@ -185,7 +188,13 @@ export async function openaiCall(s: HomeLLMSettings, provider: ProviderId, model
 }
 
 /** A single reply with no tools (used by spell check). */
-export async function sendChat(s: HomeLLMSettings, provider: ProviderId, model: string, messages: ChatMessage[], system: string): Promise<string> {
+export async function sendChat(s: HomeLLMSettings, provider: ProviderId, model: string, messages: ChatMessage[], system: string, onStatus?: (text: string) => void): Promise<string> {
+	if (provider === "local") {
+		const ai = localAI();
+		if (!ai) throw new Error(NO_LOCAL_ADDON);
+		// Small on-device models answer best with short replies; thinking budgets don't apply.
+		return ai.chat([{ role: "system", content: system }, ...messages], { maxTokens: Math.min(s.maxTokens, 2048), temperature: s.temperature, onStatus });
+	}
 	if (provider === "anthropic") {
 		const reply = await anthropicCall(s, model, { system, messages });
 		return reply.content

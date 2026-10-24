@@ -5,6 +5,7 @@ import { lineDiff } from "./diff";
 import { memoryPath } from "./memory";
 import { modelFor } from "./providers";
 import { moment } from "./time";
+import { LOCAL_MODEL, localAI } from "./local";
 import { EFFORT_LABELS, Effort, MODEL_SUGGESTIONS, PROVIDER_LABELS, ProviderId } from "./settings";
 
 export const CHAT_VIEW_TYPE = "home-llm-chat";
@@ -47,6 +48,7 @@ const SUGGESTIONS = [
 
 /** "claude-sonnet-5-5" -> "Claude Sonnet 5.5"; other ids are shown as-is. */
 export function prettyModel(id: string | undefined): string {
+	if (id === LOCAL_MODEL) return localAI()?.modelName() ?? "On-device model";
 	const m = /^claude-([a-z]+)-(\d+)-(\d+)$/.exec(id ?? "");
 	if (m) return `Claude ${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}.${m[3]}`;
 	return id || "No model";
@@ -109,6 +111,10 @@ export class ChatView extends ItemView {
 		root.empty();
 		root.addClass("home-llm-chat");
 		root.toggleClass("is-mobile", Platform.isMobile);
+		// In a tab the chat becomes a full page (centred column); in a sidebar it stays compact.
+		const showAsPage = () => root.toggleClass("is-page", this.leaf.getRoot() === this.app.workspace.rootSplit);
+		showAsPage();
+		this.registerEvent(this.app.workspace.on("layout-change", showAsPage));
 
 		const header = root.createDiv("hlc-header");
 		this.modelBtn = header.createEl("button", { cls: "hlc-model" });
@@ -230,6 +236,7 @@ export class ChatView extends ItemView {
 	private hasKey(p: ProviderId): boolean {
 		const s = this.plugin.settings;
 		if (p === "custom") return !!s.customBaseUrl;
+		if (p === "local") return !!localAI();
 		return !!{ anthropic: s.anthropicKey, openai: s.openaiKey, openrouter: s.openrouterKey }[p];
 	}
 

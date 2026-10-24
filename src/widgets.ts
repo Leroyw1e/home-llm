@@ -1,7 +1,7 @@
 import { App, Component, TFile, TFolder, getAllTags, setIcon } from "obsidian";
 import type HomeLLMPlugin from "./main";
 import { dailyPath, getOrCreateDaily } from "./daily";
-import { FOCUS_LABELS, FocusMode, formatClock } from "./focus";
+import { FOCUS_LABELS, FocusMode } from "./focus";
 import { StatsSummary } from "./stats";
 import { moment } from "./time";
 
@@ -161,30 +161,33 @@ export function statsCard(parent: HTMLElement, ctx: CardContext, compact = false
 			return;
 		}
 		const s: StatsSummary = stats.summary();
-		const hero = body.createDiv("hls-hero");
+		// The word count and streak sit side by side when the card is wide, stacked when narrow.
+		const top = body.createDiv("hls-top");
+		const hero = top.createDiv("hls-hero");
 		hero.createDiv({ cls: "hls-big", text: s.words.toLocaleString() });
 		const sub = hero.createDiv("hls-big-sub");
 		sub.createSpan({ text: "words in your vault" });
 		const delta = sub.createSpan({ cls: "hls-today", text: `${s.wordsToday >= 0 ? "+" : "−"}${Math.abs(s.wordsToday).toLocaleString()} today` });
 		delta.toggleClass("is-down", s.wordsToday < 0);
-		streakRow(body, s);
+		streakRow(top, s);
 		if (compact) return;
 
 		const grid = body.createDiv("hls-grid");
-		const tile = (icon: string, value: string, label: string) => {
-			const t = grid.createDiv("hls-tile");
+		// Short labels keep tiles tidy at any width; the full meaning shows on hover.
+		const tile = (icon: string, value: string, label: string, meaning: string) => {
+			const t = grid.createDiv({ cls: "hls-tile", attr: { "aria-label": meaning } });
 			setIcon(t.createSpan("hls-tile-icon"), icon);
 			t.createDiv({ cls: "hls-tile-num", text: value });
 			t.createDiv({ cls: "hls-tile-label", text: label });
 		};
-		tile("pilcrow", s.chars.toLocaleString(), "Characters");
-		tile("divide", s.avgWords.toLocaleString(), "Words per note");
-		tile("book-open", readingTime(s.readingMinutes), "To read it all");
-		tile("link", s.links.toLocaleString(), "Links");
-		tile("calendar-plus", s.newThisWeek.toLocaleString(), "New this week");
-		tile("calendar-range", s.newThisMonth.toLocaleString(), "New this month");
-		tile("unlink", s.orphans.toLocaleString(), "Unlinked notes");
-		tile("paperclip", s.attachments.toLocaleString(), "Attachments");
+		tile("pilcrow", s.chars.toLocaleString(), "Characters", "Characters in your notes");
+		tile("divide", s.avgWords.toLocaleString(), "Avg words", "Average words per note");
+		tile("book-open", readingTime(s.readingMinutes), "Read time", "Time to read every note");
+		tile("link", s.links.toLocaleString(), "Links", "Links between notes");
+		tile("calendar-plus", s.newThisWeek.toLocaleString(), "This week", "Notes created this week");
+		tile("calendar-range", s.newThisMonth.toLocaleString(), "This month", "Notes created this month");
+		tile("unlink", s.orphans.toLocaleString(), "Unlinked", "Notes with no links in or out");
+		tile("paperclip", s.attachments.toLocaleString(), "Attachments", "Images, PDFs and other files");
 
 		const total = s.tasksDone + s.tasksOpen;
 		if (total) {
@@ -266,7 +269,7 @@ export function focusCard(parent: HTMLElement, ctx: CardContext, compact = false
 		b.onclick = fn;
 		return b;
 	};
-	iconButton("rotate-ccw", "Reset", () => timer.reset());
+	const stop = iconButton("square", "Stop", () => timer.stop(), "is-stop");
 	const play = iconButton("play", "Start", () => timer.toggle(), "is-primary");
 	iconButton("skip-forward", "Skip to next", () => timer.skip());
 	const dots = body.createDiv("hlh-focus-dots");
@@ -274,11 +277,12 @@ export function focusCard(parent: HTMLElement, ctx: CardContext, compact = false
 	let lastRunning: boolean | null = null;
 	const draw = () => {
 		const st = timer.state;
-		time.setText(formatClock(timer.left));
+		time.setText(timer.clock());
 		label.setText(timer.running ? FOCUS_LABELS[st.mode] : timer.active ? "Paused" : FOCUS_LABELS[st.mode]);
 		arc.setAttribute("stroke-dashoffset", String(circumference * timer.progress));
 		el.toggleClass("is-running", timer.running);
 		el.toggleClass("is-break", st.mode !== "focus");
+		stop.disabled = !timer.active && st.mode === "focus";
 		for (const [m, b] of modeBtns) b.toggleClass("is-active", m === st.mode);
 		if (lastRunning !== timer.running) {
 			lastRunning = timer.running;
