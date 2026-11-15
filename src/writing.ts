@@ -161,7 +161,7 @@ Base everything on the evidence below. Don't invent examples, and don't include 
 ${mistakes.length ? `<spelling_mistakes>\n${mistakes.join("\n")}\n</spelling_mistakes>\n\n` : ""}${other.length ? `<other_problems>\n${other.join("\n")}\n</other_problems>\n\n` : ""}<writing_samples>${text || "\n(none yet)"}\n</writing_samples>`;
 	let reply: string;
 	try {
-		const provider = s.anthropicKey ? "anthropic" : s.provider;
+		const provider = s.provider;
 		reply = await sendChat(s, provider, modelFor(s, provider), [{ role: "user", content: ask }], "You are a friendly writing coach who studies someone's writing and describes it clearly and kindly.");
 	} catch (e) {
 		notice.hide();

@@ -7,9 +7,10 @@ import type { WritingLog } from "./writing";
 import { Reader, voices } from "./speak";
 import { currentUsage, enabledPluginSizes } from "./performance";
 import { localAI } from "./local";
+import { listGeminiModels, listOpenAIModels } from "./providers";
 import { DEFAULT_TRANSCRIBE_MODEL, TRANSCRIBER_LABELS, type Transcriber } from "./voice";
 
-export type ProviderId = "anthropic" | "openai" | "openrouter" | "custom" | "local";
+export type ProviderId = "anthropic" | "gemini" | "openai" | "openrouter" | "custom" | "local";
 export type ChatLocation = "left" | "right" | "tab";
 /** How hard the model thinks before answering; "default" leaves it to the model. */
 export type Effort = "default" | "low" | "medium" | "high" | "xhigh" | "max";
@@ -99,13 +100,18 @@ export interface HomeLLMSettings {
 	voiceLive: boolean;
 	/** Start each transcript paragraph with a time you can click to hear that part. */
 	voiceTimestamps: boolean;
-	/** Google Gemini key, used only for voice notes. */
+	/** Google Gemini: a chat provider (free tier available), and the default for voice note transcripts. */
 	geminiKey: string;
+	geminiModel: string;
+	/** Models fetched for the key, for the pickers. */
+	geminiModels: { id: string; name: string }[];
 	provider: ProviderId;
 	anthropicKey: string;
 	anthropicModel: string;
 	openaiKey: string;
 	openaiModel: string;
+	/** ChatGPT models fetched for the key, for the pickers. */
+	openaiModels: { id: string; name: string }[];
 	openrouterKey: string;
 	openrouterModel: string;
 	customBaseUrl: string;
@@ -178,13 +184,16 @@ export const DEFAULT_SETTINGS: HomeLLMSettings = {
 	voiceModel: "",
 	voiceFolder: "Voice notes",
 	geminiKey: "",
+	geminiModel: "gemini-3.8-flash",
+	geminiModels: [],
 	voiceLive: true,
 	voiceTimestamps: true,
 	provider: "anthropic",
 	anthropicKey: "",
 	anthropicModel: "claude-sonnet-5-5",
 	openaiKey: "",
-	openaiModel: "gpt-4o",
+	openaiModel: "gpt-5-mini",
+	openaiModels: [],
 	openrouterKey: "",
 	openrouterModel: "anthropic/claude-sonnet-5.5",
 	customBaseUrl: "http://localhost:11434/v1",
@@ -218,6 +227,7 @@ export const DEFAULT_SETTINGS: HomeLLMSettings = {
 
 export const PROVIDER_LABELS: Record<ProviderId, string> = {
 	anthropic: "Anthropic (Claude)",
+	gemini: "Google Gemini",
 	openai: "OpenAI",
 	openrouter: "OpenRouter",
 	custom: "Custom / Ollama / LM Studio",
@@ -226,7 +236,8 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = {
 
 export const MODEL_SUGGESTIONS: Record<ProviderId, string[]> = {
 	anthropic: ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"],
-	openai: ["gpt-4o", "gpt-4o-mini"],
+	gemini: ["gemini-3.8-flash"],
+	openai: ["gpt-5", "gpt-5-mini"],
 	openrouter: ["anthropic/claude-sonnet-5.5", "openai/gpt-4o"],
 	custom: [],
 	local: [],
@@ -288,6 +299,62 @@ export class HomeLLMSettingTab extends PluginSettingTab {
 						await refresh();
 					})
 				);
+
+		/** A model dropdown filled from the provider's own list for your key, with refresh and a box for any other name. */
+		const modelPicker = (provider: "gemini" | "openai") => {
+			const keys = provider === "gemini" ? ({ list: "geminiModels", model: "geminiModel", key: "geminiKey" } as const) : ({ list: "openaiModels", model: "openaiModel", key: "openaiKey" } as const);
+			const fetchList = provider === "gemini" ? listGeminiModels : listOpenAIModels;
+			const row = new Setting(containerEl).setName("Model");
+			const draw = () => {
+				row.controlEl.empty();
+				const known = s[keys.list].length ? s[keys.list] : MODEL_SUGGESTIONS[provider].map((id) => ({ id, name: id }));
+				const list = known.some((m) => m.id === s[keys.model]) ? known : [{ id: s[keys.model], name: s[keys.model] }, ...known];
+				row.setDesc(s[keys.list].length ? `${s[keys.list].length} models available to your key.` : "Press refresh to see every model your key can use.");
+				row.addDropdown((d) => {
+					for (const m of list) d.addOption(m.id, m.name === m.id ? m.id : `${m.name} (${m.id})`);
+					d.setValue(s[keys.model]).onChange(async (v) => {
+						s[keys.model] = v;
+						await save();
+					});
+				});
+				row.addExtraButton((b) =>
+					b
+						.setIcon("refresh-cw")
+						.setTooltip("Refresh the model list")
+						.onClick(async () => {
+							try {
+								s[keys.list] = await fetchList(s[keys.key]);
+								await save();
+								new Notice(`Found ${s[keys.list].length} models`);
+							} catch (e) {
+								new Notice("Couldn't get the model list: " + (e instanceof Error ? e.message : String(e)));
+							}
+							draw();
+						})
+				);
+			};
+			draw();
+			// Fill the list the first time there's a key, so the picker shows real choices without pressing refresh.
+			if (s[keys.key] && !s[keys.list].length) {
+				void fetchList(s[keys.key])
+					.then(async (models) => {
+						s[keys.list] = models;
+						await save();
+						draw();
+					})
+					.catch(() => undefined);
+			}
+			new Setting(containerEl)
+				.setName("Other model")
+				.setDesc("Type any model name to use one that isn't in the list.")
+				.addText((tx) =>
+					tx.setPlaceholder("Model name").onChange(async (v) => {
+						if (!v.trim()) return;
+						s[keys.model] = v.trim();
+						await save();
+					})
+				);
+		};
 
 		heading("Features");
 		// Rows for features that need AI, so they can show when the AI switch makes them unavailable.
@@ -386,9 +453,12 @@ export class HomeLLMSettingTab extends PluginSettingTab {
 		heading("Anthropic");
 		keyField("API key", "anthropicKey");
 		textField("Model", "anthropicModel", MODEL_SUGGESTIONS.anthropic.join(", "));
+		heading("Google Gemini");
+		keyField("API key", "geminiKey").setDesc("Free to get from Google, with a daily limit. Also used for voice note transcripts. On the free tier, Google may use what you send to improve its products.");
+		modelPicker("gemini");
 		heading("OpenAI");
 		keyField("API key", "openaiKey");
-		textField("Model", "openaiModel");
+		modelPicker("openai");
 		heading("OpenRouter");
 		keyField("API key", "openrouterKey");
 		textField("Model", "openrouterModel");
@@ -474,10 +544,9 @@ export class HomeLLMSettingTab extends PluginSettingTab {
 		});
 
 		heading("Voice notes");
-		keyField("Gemini API key", "geminiKey").setDesc("Gemini listens to your recording and writes the transcript and summary, then Claude names the note. You can get a free key from Google.");
 		new Setting(containerEl)
 			.setName("Transcription")
-			.setDesc("Claude can't listen to audio, so another service turns speech into text. Automatic uses Gemini if it has a key, then the other keys (with Claude writing the summary).")
+			.setDesc("Automatic uses Gemini if it has a key (set above), which writes the transcript and summary. Otherwise it uses the other keys, and your default model writes the summary. Your default model names the note.")
 			.addDropdown((d) => {
 				for (const [v, label] of Object.entries(TRANSCRIBER_LABELS)) d.addOption(v, label);
 				d.setValue(s.voiceProvider).onChange(async (v) => {

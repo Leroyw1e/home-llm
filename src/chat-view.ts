@@ -3,10 +3,12 @@ import type HomeLLMPlugin from "./main";
 import { Activity, EditRequest, runAgent } from "./agent";
 import { lineDiff } from "./diff";
 import { memoryPath } from "./memory";
-import { modelFor } from "./providers";
+import { modelFor, openaiModelName } from "./providers";
 import { moment } from "./time";
 import { LOCAL_MODEL, localAI } from "./local";
-import { EFFORT_LABELS, Effort, MODEL_SUGGESTIONS, PROVIDER_LABELS, ProviderId } from "./settings";
+import { rankModels } from "./model-info";
+import { ModelPicker } from "./model-picker";
+import { DEFAULT_SETTINGS, EFFORT_LABELS, MODEL_SUGGESTIONS, PROVIDER_LABELS, ProviderId } from "./settings";
 
 export const CHAT_VIEW_TYPE = "home-llm-chat";
 
@@ -51,6 +53,9 @@ export function prettyModel(id: string | undefined): string {
 	if (id === LOCAL_MODEL) return localAI()?.modelName() ?? "On-device model";
 	const m = /^claude-([a-z]+)-(\d+)-(\d+)$/.exec(id ?? "");
 	if (m) return `Claude ${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}.${m[3]}`;
+	if (/^(gpt-|chatgpt-)/.test(id ?? "")) return openaiModelName(id ?? "");
+	const g = /^gemini-([\d.]+)-([a-z]+)(.*)$/.exec(id ?? "");
+	if (g) return `Gemini ${g[1]} ${g[2][0].toUpperCase()}${g[2].slice(1)}${g[3].replace(/-/g, " ")}`;
 	return id || "No model";
 }
 
@@ -235,57 +240,47 @@ export class ChatView extends ItemView {
 
 	private hasKey(p: ProviderId): boolean {
 		const s = this.plugin.settings;
-		if (p === "custom") return !!s.customBaseUrl;
+		// The Ollama address is filled in by default, so a server only counts once it's been changed or given a key.
+		if (p === "custom") return !!s.customBaseUrl && (s.customBaseUrl !== DEFAULT_SETTINGS.customBaseUrl || s.customModel !== DEFAULT_SETTINGS.customModel || !!s.customKey);
 		if (p === "local") return !!localAI();
-		return !!{ anthropic: s.anthropicKey, openai: s.openaiKey, openrouter: s.openrouterKey }[p];
+		return !!{ anthropic: s.anthropicKey, gemini: s.geminiKey, openai: s.openaiKey, openrouter: s.openrouterKey }[p];
 	}
 
-	private modelMenu(e: MouseEvent): void {
+	private modelMenu(_e: MouseEvent): void {
 		const s = this.plugin.settings;
-		const menu = new Menu();
-		const all = Object.keys(PROVIDER_LABELS) as ProviderId[];
-		let providers = all.filter((p) => this.hasKey(p) || p === this.provider);
-		if (providers.length <= 1) providers = all;
-		providers.forEach((p, i) => {
-			if (i > 0) menu.addSeparator();
-			menu.addItem((it) => it.setTitle(PROVIDER_LABELS[p]).setDisabled(true));
-			const models = [...new Set([modelFor(s, p), ...MODEL_SUGGESTIONS[p]].filter(Boolean))];
-			for (const m of models) {
-				menu.addItem((it) =>
-					it
-						.setTitle(prettyModel(m))
-						.setChecked(p === this.provider && m === this.model)
-						.onClick(() => {
-							this.provider = p;
-							this.model = m;
-							this.updateModelLabel();
-							this.app.workspace.requestSaveLayout();
-						})
-				);
-			}
+		if (!this.modelBtn) return;
+		const sections = (Object.keys(PROVIDER_LABELS) as ProviderId[]).map((p) => {
+			const fetched = p === "gemini" ? s.geminiModels : p === "openai" ? s.openaiModels : [];
+			const ids = [...new Set([modelFor(s, p), ...(fetched.length ? fetched.map((m) => m.id) : MODEL_SUGGESTIONS[p])].filter(Boolean))];
+			const ready = this.hasKey(p) || p === this.provider;
+			return {
+				provider: p,
+				label: PROVIDER_LABELS[p],
+				ready,
+				setupLabel: p === "local" ? "Install the Home + AI Local add-on" : p === "custom" ? "Set up a server" : "Add API key",
+				models: rankModels(p, ids).map((id) => ({ id, name: fetched.find((f) => f.id === id)?.name ?? prettyModel(id) })),
+			};
 		});
-		menu.addSeparator();
-		menu.addItem((it) => it.setTitle("Effort").setDisabled(true));
-		for (const e of Object.keys(EFFORT_LABELS) as Effort[]) {
-			menu.addItem((it) =>
-				it
-					.setTitle(EFFORT_LABELS[e])
-					.setChecked(s.effort === e)
-					.onClick(async () => {
-						s.effort = e;
-						await this.plugin.saveSettings();
-						this.updateModelLabel();
-					})
-			);
-		}
-		menu.addSeparator();
-		menu.addItem((it) =>
-			it
-				.setTitle("Models and API keys…")
-				.setIcon("settings")
-				.onClick(() => this.plugin.openSettings())
-		);
-		menu.showAtMouseEvent(e);
+		new ModelPicker({
+			anchor: this.modelBtn,
+			current: { provider: this.provider, model: this.model },
+			sections,
+			effort: s.effort,
+			effortLabels: EFFORT_LABELS,
+			localName: localAI()?.modelName(),
+			onPick: (provider, model) => {
+				this.provider = provider;
+				this.model = model;
+				this.updateModelLabel();
+				this.app.workspace.requestSaveLayout();
+			},
+			onEffort: (effort) => {
+				s.effort = effort;
+				void this.plugin.saveSettings();
+				this.updateModelLabel();
+			},
+			onSetup: () => this.plugin.openSettings(),
+		});
 	}
 
 	private moreMenu(e: MouseEvent): void {

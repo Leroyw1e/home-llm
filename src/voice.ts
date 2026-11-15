@@ -533,7 +533,7 @@ async function geminiUpload(key: string, audio: ArrayBuffer, mime: string): Prom
 /** Sends a prompt and a recording to Gemini and returns the text of its reply. */
 async function geminiAsk(s: HomeLLMSettings, model: string, blob: Blob, prompt: string, schema?: unknown): Promise<string> {
 	const key = s.geminiKey;
-	if (!key) throw new Error("No Gemini API key set. Add it under Voice notes in Home + AI settings.");
+	if (!key) throw new Error("No Gemini API key set. Add it under Google Gemini in Home + AI settings.");
 	const mime = audioType(blob, true);
 	const audio = await blob.arrayBuffer();
 	const media =
@@ -681,12 +681,9 @@ export function closeMiniPlayer(): void {
 	miniPlayer = null;
 }
 
-/**
- * Claude names the note, and writes the summary too when the transcription service didn't.
- * Uses Claude whenever there's an Anthropic key, otherwise the default model.
- */
+/** Your default model names the note, and writes the summary too when the transcription service didn't. */
 async function nameAndSummarise(s: HomeLLMSettings, transcript: string, summary: string): Promise<{ title: string; summary: string }> {
-	const provider = s.anthropicKey ? "anthropic" : s.provider;
+	const provider = s.provider;
 	const ask = summary
 		? `Here's a summary and transcript of a voice recording I made. Reply with only a short title for the note (at most 8 words), nothing else.`
 		: `Here's the transcript of a voice recording I made. Reply in Markdown:

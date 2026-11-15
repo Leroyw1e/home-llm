@@ -29,7 +29,7 @@ Optionally draws the lines between linked notes in purple (on by default; reopen
 
 ### AI chat
 - Opens in the left sidebar, right sidebar or a tab, and can move between them without losing the conversation.
-- Works with **Anthropic (Claude)**, **OpenAI**, **OpenRouter**, or any OpenAI-compatible server such as **Ollama** or **LM Studio**.
+- Works with **Anthropic (Claude)**, **Google Gemini** (free tier available), **OpenAI**, **OpenRouter**, or any OpenAI-compatible server such as **Ollama** or **LM Studio**.
 - **Works with your notes:** the AI can read the note you have open and, with vault access on (the library button in the chat header), search and read any note to answer you. Small labels under each reply show which notes it searched or read.
 - **Edits only with your permission:** when the AI wants to change or create a note, the chat shows the exact change (removed lines in red, added lines in green) with **Approve** and **Reject**. Nothing is saved until you approve. It can't write to Obsidian's settings folder.
 - Attach the current note as context, copy replies, insert replies into your note, regenerate, and save a chat as a note.
@@ -53,8 +53,8 @@ Optionally draws the lines between linked notes in purple (on by default; reopen
 
 ### Voice notes
 - Press the **microphone** in the left ribbon (or run "Record voice note") to start recording. A bar across the top of the window shows a live audio line, the time, and **pause** and **stop** buttons.
-- When you stop, a new note opens with the recording, a **Summary** and the full **Transcript**, and **Claude names the note**.
-- **Google Gemini** listens to the recording and writes the transcript and summary (add a Gemini API key under Voice notes in settings). Claude can't listen to audio, so without a Gemini key the transcript comes from **OpenAI**, an **OpenRouter** audio model or your own Whisper server, and **Claude** writes the summary.
+- When you stop, a new note opens with the recording, a **Summary** and the full **Transcript**, and your AI model names the note.
+- **Google Gemini** listens to the recording and writes the transcript and summary (add a Gemini API key under Google Gemini in settings). Without a Gemini key the transcript comes from **OpenAI**, an **OpenRouter** audio model or your own Whisper server, and your default model writes the summary.
 - **Live transcript:** while you record, what you're saying appears under the bar, a few seconds behind (turn it off under Voice notes to save the extra requests).
 - **Timestamps:** each paragraph of the transcript starts with a time. Click it to hear that part of the recording.
 - The recording is always kept in your attachments folder, so nothing is lost if a step fails. Works on desktop, iPhone and iPad (allow microphone access when asked).
@@ -131,7 +131,7 @@ Adds a few small gaps to the left ribbon so you can group your icons. Hold the c
 
 This plugin needs an account with an AI provider to use chat, spell check and voice note transcription.
 
-- **What is sent:** your chat messages, the note you attach, notes the AI reads or searches while answering (only with vault access on, except the open note), and the text you spell check are sent to the AI provider you choose: `api.anthropic.com`, `api.openai.com`, `openrouter.ai`, or the custom server address you enter. Nothing is sent until you send a message or run spell check.
+- **What is sent:** your chat messages, the note you attach, notes the AI reads or searches while answering (only with vault access on, except the open note), and the text you spell check are sent to the AI provider you choose: `api.anthropic.com`, `generativelanguage.googleapis.com` (Gemini), `api.openai.com`, `openrouter.ai`, or the custom server address you enter. Nothing is sent until you send a message or run spell check.
 - **API keys** are stored in this plugin's `data.json` inside your vault's config folder. If you sync your vault, the keys sync too.
 - **Chat history** is stored in `chats.json` in the same folder, and never leaves your device except through your own vault sync.
 - **Voice notes**: recordings are saved in your vault. With live transcript on, short clips are sent while you speak. With AI on, the audio is sent to the transcription service you chose (`generativelanguage.googleapis.com` for Gemini, `api.openai.com`, `openrouter.ai` or your custom server), and the transcript to your AI provider (Claude, if you have an Anthropic key) to name the note. The microphone is only on while the recording bar is showing.
